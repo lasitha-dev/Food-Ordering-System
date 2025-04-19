@@ -22,7 +22,12 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
-  Chip
+  Chip,
+  Dialog,
+  List,
+  ListItem,
+  Container,
+  ListItemText
 } from '@mui/material';
 import { 
   Add, 
@@ -38,6 +43,8 @@ import { styled } from '@mui/material/styles';
 import CustomerLayout from '../../components/layouts/CustomerLayout';
 import { format as formatDate } from 'date-fns';
 import PaymentPortal from '../../components/payment/PaymentPortal';
+import { useNavigate } from 'react-router-dom';
+import { useContext } from 'react';
 
 const OrderSummaryPaper = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(3),
@@ -69,8 +76,32 @@ const steps = ['Review Order', 'Delivery Details', 'Payment', 'Confirmation'];
 // Key for storing checkout state in localStorage
 const CHECKOUT_STATE_KEY = 'checkout_state';
 
+// Replace makeStyles with styled components
+const OrderHistoryItemContainer = styled(Box)(({ theme }) => ({
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  padding: theme.spacing(2),
+}));
+
+const OrderHistoryContent = styled(Box)({
+  flex: 1,
+});
+
+const OrderActionsContainer = styled(Box)({
+  display: 'flex',
+  alignItems: 'center',
+});
+
 const Checkout = () => {
-  const { cart, updateQuantity, removeFromCart, clearCart, addToOrderHistory, updateOrderPayment } = useCart();
+  const { cart, updateQuantity, removeFromCart, clearCart, addToOrderHistory, updateOrderPayment, removeOrderFromHistory } = useCart();
+  const navigate = useNavigate();
+  
+  // Track cart items for changes
+  const [previousCartItemIds, setPreviousCartItemIds] = useState(() => {
+    // Initialize with current cart items
+    return (cart.items || []).map(item => item._id);
+  });
   
   // Initialize state from localStorage if available
   const [activeStep, setActiveStep] = useState(() => {
@@ -82,13 +113,30 @@ const Checkout = () => {
     return 0;
   });
   
+  // Get default address from user settings if available
+  const getDefaultAddress = () => {
+    try {
+      const savedUser = localStorage.getItem('user');
+      if (savedUser) {
+        const userObj = JSON.parse(savedUser);
+        if (userObj.defaultDeliveryAddress) {
+          return userObj.defaultDeliveryAddress;
+        }
+      }
+      return '';
+    } catch (e) {
+      console.error('Error loading default address:', e);
+      return '';
+    }
+  };
+  
   const [deliveryAddress, setDeliveryAddress] = useState(() => {
     const savedState = localStorage.getItem(CHECKOUT_STATE_KEY);
     if (savedState) {
       const { address } = JSON.parse(savedState);
-      return address || '';
+      return address || getDefaultAddress();
     }
-    return '';
+    return getDefaultAddress();
   });
   
   const [additionalInstructions, setAdditionalInstructions] = useState(() => {
@@ -112,6 +160,22 @@ const Checkout = () => {
   const [orderComplete, setOrderComplete] = useState(false);
   const [alertOpen, setAlertOpen] = useState(false);
   const [currentOrderId, setCurrentOrderId] = useState(null);
+
+  // Check if cart items have changed and reset step if needed
+  useEffect(() => {
+    const currentCartItemIds = (cart.items || []).map(item => item._id);
+    
+    // Check if cart items have changed (additions only, not removals or quantity changes)
+    const hasNewItems = currentCartItemIds.some(id => !previousCartItemIds.includes(id));
+    
+    if (hasNewItems) {
+      // New items added, reset to review order step
+      setActiveStep(0);
+    }
+    
+    // Update previous cart items reference
+    setPreviousCartItemIds(currentCartItemIds);
+  }, [cart.items]);
 
   // Save checkout state whenever it changes
   useEffect(() => {
@@ -439,23 +503,78 @@ const OrderSummary = ({ cart, subtotal, deliveryFee, tipAmount, totalAmount }) =
 
 // Delivery Details Component
 const DeliveryDetails = ({ deliveryAddress, setDeliveryAddress, additionalInstructions, setAdditionalInstructions }) => {
+  const [usingDefault, setUsingDefault] = useState(true);
+  const [defaultAddress, setDefaultAddress] = useState('');
+  
+  // Check if we're using the default address from settings
+  React.useEffect(() => {
+    const savedDefaultAddress = (() => {
+      try {
+        const savedUser = localStorage.getItem('user');
+        if (savedUser) {
+          const userObj = JSON.parse(savedUser);
+          return userObj.defaultDeliveryAddress || '';
+        }
+        return '';
+      } catch (e) {
+        return '';
+      }
+    })();
+    
+    setDefaultAddress(savedDefaultAddress);
+    // Check if current address matches default
+    setUsingDefault(deliveryAddress === savedDefaultAddress && savedDefaultAddress !== '');
+  }, [deliveryAddress]);
+  
+  const handleAddressChange = (e) => {
+    setDeliveryAddress(e.target.value);
+    // If the address is changed manually, it's no longer the default
+    setUsingDefault(false);
+  };
+  
+  const useDefaultAddress = () => {
+    setDeliveryAddress(defaultAddress);
+    setUsingDefault(true);
+  };
+
   return (
     <Paper sx={{ p: 3 }}>
       <Typography variant="h6" gutterBottom>
         Delivery Information
       </Typography>
       
+      {usingDefault && defaultAddress && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Using your default delivery address from settings
+        </Alert>
+      )}
+      
       <TextField
         label="Delivery Address"
         variant="outlined"
         fullWidth
         value={deliveryAddress}
-        onChange={(e) => setDeliveryAddress(e.target.value)}
+        onChange={handleAddressChange}
         helperText="Enter your complete delivery address"
         placeholder="123 Main St, Apartment 4B, City, State, ZIP"
         required
         sx={{ mb: 2 }}
       />
+      
+      {defaultAddress && (
+        <Box sx={{ mb: 2 }}>
+          <Typography variant="body2" color="text.secondary" gutterBottom>
+            Your saved address:
+          </Typography>
+          <Chip
+            label={defaultAddress}
+            color="primary"
+            variant={usingDefault ? "filled" : "outlined"}
+            onClick={useDefaultAddress}
+            sx={{ mt: 0.5 }}
+          />
+        </Box>
+      )}
       
       <TextField
         label="Additional Instructions"
@@ -507,7 +626,7 @@ const PaymentDetails = ({ paymentMethod, setPaymentMethod }) => {
 
 // Order Confirmation Component
 const OrderConfirmation = ({ orderComplete, orderHistory }) => {
-  const { updateOrderPayment } = useCart();
+  const { updateOrderPayment, removeOrderFromHistory } = useCart();
   const latestOrder = orderHistory.length > 0 ? orderHistory[orderHistory.length - 1] : null;
   
   // Sort orders by date (newest first)
@@ -520,6 +639,8 @@ const OrderConfirmation = ({ orderComplete, orderHistory }) => {
   // Payment portal state
   const [paymentPortalOpen, setPaymentPortalOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [orderToDelete, setOrderToDelete] = useState(null);
   
   const handleOpenPaymentPortal = (order) => {
     setSelectedOrder(order);
@@ -547,6 +668,23 @@ const OrderConfirmation = ({ orderComplete, orderHistory }) => {
   // Check if an order has been paid
   const isOrderPaid = (order) => {
     return order.paymentStatus === 'paid';
+  };
+  
+  // Delete order handling
+  const handleDeleteClick = (order) => {
+    setOrderToDelete(order);
+    setDeleteConfirmOpen(true);
+  };
+  
+  const handleDeleteConfirm = () => {
+    if (orderToDelete) {
+      removeOrderFromHistory(orderToDelete.id);
+    }
+    setDeleteConfirmOpen(false);
+  };
+  
+  const handleDeleteCancel = () => {
+    setDeleteConfirmOpen(false);
   };
   
   return (
@@ -629,6 +767,14 @@ const OrderConfirmation = ({ orderComplete, orderHistory }) => {
                     status={isOrderPaid(order) ? 'Paid' : order.status || 'Placed'}
                     icon={<CheckCircleIcon />}
                   />
+                  <IconButton 
+                    size="small" 
+                    color="error" 
+                    onClick={() => handleDeleteClick(order)}
+                    title="Delete order"
+                  >
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
                 </Box>
               </Box>
               
@@ -734,6 +880,30 @@ const OrderConfirmation = ({ orderComplete, orderHistory }) => {
           </Typography>
         </Paper>
       )}
+      
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteConfirmOpen}
+        onClose={handleDeleteCancel}
+        aria-labelledby="delete-dialog-title"
+      >
+        <Box sx={{ p: 2, minWidth: 300 }}>
+          <Typography variant="h6" id="delete-dialog-title" gutterBottom>
+            Delete Order?
+          </Typography>
+          <Typography variant="body2" sx={{ mb: 3 }}>
+            Are you sure you want to delete this order from your history?
+          </Typography>
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+            <Button onClick={handleDeleteCancel} color="primary">
+              Cancel
+            </Button>
+            <Button onClick={handleDeleteConfirm} color="error" variant="contained">
+              Delete
+            </Button>
+          </Box>
+        </Box>
+      </Dialog>
       
       {/* Payment Portal */}
       <PaymentPortal

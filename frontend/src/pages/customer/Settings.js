@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -6,46 +6,108 @@ import {
   Grid,
   TextField,
   Button,
-  Switch,
-  FormControlLabel,
-  Divider,
   Avatar,
   IconButton,
   Alert,
-  Snackbar
+  Snackbar,
+  CircularProgress
 } from '@mui/material';
-import { Edit as EditIcon, Camera as CameraIcon } from '@mui/icons-material';
+import { Edit as EditIcon, Camera as CameraIcon, Save as SaveIcon } from '@mui/icons-material';
 import useAuth from '../../hooks/useAuth';
 import CustomerLayout from '../../components/layouts/CustomerLayout';
 
 const Settings = () => {
-  const { currentUser } = useAuth();
+  const { currentUser, updateUserProfile } = useAuth();
   const [formData, setFormData] = useState({
     firstName: currentUser?.firstName || '',
     lastName: currentUser?.lastName || '',
     email: currentUser?.email || '',
     phone: currentUser?.phone || '',
     address: currentUser?.address || '',
-    emailNotifications: true,
-    smsNotifications: false,
   });
   
+  const [profilePic, setProfilePic] = useState(currentUser?.profilePic || null);
+  const [previewImage, setPreviewImage] = useState(null);
   const [successAlert, setSuccessAlert] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const fileInputRef = React.useRef(null);
+  
+  useEffect(() => {
+    // Update form when currentUser changes (like after saving)
+    if (currentUser) {
+      setFormData({
+        firstName: currentUser.firstName || '',
+        lastName: currentUser.lastName || '',
+        email: currentUser.email || '',
+        phone: currentUser.phone || '',
+        address: currentUser.address || '',
+      });
+      setProfilePic(currentUser.profilePic || null);
+    }
+  }, [currentUser]);
   
   const handleChange = (e) => {
-    const { name, value, checked } = e.target;
+    const { name, value } = e.target;
     setFormData({
       ...formData,
-      [name]: e.target.type === 'checkbox' ? checked : value
+      [name]: value
     });
   };
   
-  const handleSubmit = (e) => {
+  const handleProfilePicClick = () => {
+    fileInputRef.current.click();
+  };
+  
+  const handleFileChange = (e) => {
+    if (e.target.files.length > 0) {
+      const file = e.target.files[0];
+      const reader = new FileReader();
+      
+      reader.onload = () => {
+        // Preview the image
+        setPreviewImage(reader.result);
+      };
+      
+      reader.readAsDataURL(file);
+    }
+  };
+  
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // Here you would normally update the user profile
-    // with your API service
-    console.log('Updating profile with:', formData);
-    setSuccessAlert(true);
+    setLoading(true);
+    setError(null);
+    
+    try {
+      // In a real implementation, you would call your API service here
+      // For demo purposes, we'll simulate a successful update
+      
+      // Simulate API delay
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Save user info to localStorage to persist between sessions
+      const updatedUser = {
+        ...currentUser,
+        ...formData,
+        profilePic: previewImage || profilePic,
+        // Store the address in localStorage so checkout can access it
+        defaultDeliveryAddress: formData.address
+      };
+      
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+      
+      // If you had a real updateUserProfile function, you'd call it like:
+      // await updateUserProfile(updatedUser);
+      
+      setSuccessAlert(true);
+      // Update the displayed profile pic
+      setProfilePic(previewImage || profilePic);
+      setPreviewImage(null);
+    } catch (err) {
+      setError(err.message || "Failed to update profile. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -60,7 +122,7 @@ const Settings = () => {
             <Paper sx={{ p: 3, textAlign: 'center' }}>
               <Box sx={{ position: 'relative', mb: 2, display: 'inline-block' }}>
                 <Avatar
-                  src={currentUser?.profilePic || ""}
+                  src={previewImage || profilePic || ""}
                   alt={formData.firstName}
                   sx={{ width: 120, height: 120, mb: 2, mx: 'auto' }}
                 />
@@ -76,9 +138,17 @@ const Settings = () => {
                     },
                   }}
                   size="small"
+                  onClick={handleProfilePicClick}
                 >
                   <CameraIcon fontSize="small" />
                 </IconButton>
+                <input
+                  type="file"
+                  accept="image/*"
+                  ref={fileInputRef}
+                  style={{ display: 'none' }}
+                  onChange={handleFileChange}
+                />
               </Box>
               
               <Typography variant="h6">
@@ -89,45 +159,18 @@ const Settings = () => {
                 {formData.email}
               </Typography>
               
-              <Button
-                variant="outlined"
-                startIcon={<EditIcon />}
-                sx={{ mt: 2 }}
-              >
-                Change Password
-              </Button>
-            </Paper>
-            
-            <Paper sx={{ p: 3, mt: 3 }}>
-              <Typography variant="h6" gutterBottom>
-                Notification Preferences
-              </Typography>
-              
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={formData.emailNotifications}
-                    onChange={handleChange}
-                    name="emailNotifications"
-                    color="primary"
-                  />
-                }
-                label="Email Notifications"
-                sx={{ width: '100%', mb: 1 }}
-              />
-              
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={formData.smsNotifications}
-                    onChange={handleChange}
-                    name="smsNotifications"
-                    color="primary"
-                  />
-                }
-                label="SMS Notifications"
-                sx={{ width: '100%' }}
-              />
+              {previewImage && (
+                <Button
+                  variant="contained"
+                  color="primary"
+                  onClick={handleSubmit}
+                  startIcon={<SaveIcon />}
+                  sx={{ mt: 2 }}
+                  disabled={loading}
+                >
+                  {loading ? <CircularProgress size={24} /> : "Save Changes"}
+                </Button>
+              )}
             </Paper>
           </Grid>
           
@@ -199,22 +242,24 @@ const Settings = () => {
                       margin="normal"
                       multiline
                       rows={2}
+                      helperText="This address will be auto-filled during checkout"
                     />
                   </Grid>
                 </Grid>
                 
+                {error && (
+                  <Alert severity="error" sx={{ mt: 2 }}>
+                    {error}
+                  </Alert>
+                )}
+                
                 <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end' }}>
-                  <Button
-                    type="button"
-                    variant="outlined"
-                    sx={{ mr: 2 }}
-                  >
-                    Cancel
-                  </Button>
                   <Button
                     type="submit"
                     variant="contained"
                     color="primary"
+                    disabled={loading}
+                    startIcon={loading ? <CircularProgress size={24} /> : <SaveIcon />}
                   >
                     Save Changes
                   </Button>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Box, 
   Drawer, 
@@ -14,17 +14,25 @@ import {
   Container,
   Badge,
   useMediaQuery,
-  CssBaseline
+  CssBaseline,
+  Avatar,
+  Menu,
+  MenuItem,
+  Tooltip
 } from '@mui/material';
 import { 
   Menu as MenuIcon, 
   Dashboard as DashboardIcon, 
   ShoppingCart as ShoppingCartIcon,
-  Settings as SettingsIcon
+  Settings as SettingsIcon,
+  Person as PersonIcon,
+  Logout as LogoutIcon,
+  AccessTime as AccessTimeIcon
 } from '@mui/icons-material';
 import { styled, useTheme } from '@mui/material/styles';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useCart } from '../../context/CartContext';
+import useAuth from '../../hooks/useAuth';
 
 const drawerWidth = 240;
 
@@ -80,12 +88,54 @@ const CustomerLayout = ({ children }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { cart } = useCart();
+  const { currentUser, logout } = useAuth();
+  
+  // User menu state
+  const [anchorEl, setAnchorEl] = useState(null);
+  const [profilePic, setProfilePic] = useState(null);
+  
+  // Load user profile from localStorage
+  useEffect(() => {
+    const savedUser = localStorage.getItem('user');
+    if (savedUser) {
+      try {
+        const userObj = JSON.parse(savedUser);
+        if (userObj.profilePic) {
+          setProfilePic(userObj.profilePic);
+        }
+      } catch (e) {
+        console.error('Error parsing user from localStorage:', e);
+      }
+    }
+  }, []);
   
   // Calculate total items in cart
   const totalItems = cart.items.reduce((total, item) => total + item.quantity, 0);
 
   const handleDrawerToggle = () => {
     setOpen(!open);
+  };
+  
+  const handleProfileMenuOpen = (event) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+  };
+  
+  const handleSettingsClick = () => {
+    setAnchorEl(null);
+    navigate('/customer/settings');
+  };
+  
+  const handleLogout = () => {
+    setAnchorEl(null);
+    // Implement logout functionality
+    if (logout) {
+      logout();
+    }
+    navigate('/login');
   };
 
   // Navigation items
@@ -101,6 +151,12 @@ const CustomerLayout = ({ children }) => {
       icon: <Badge badgeContent={totalItems} color="primary"><ShoppingCartIcon /></Badge>, 
       path: '/customer/checkout',
       active: location.pathname === '/customer/checkout' 
+    },
+    { 
+      text: 'Order History', 
+      icon: <AccessTimeIcon />, 
+      path: '/customer/order-history',
+      active: location.pathname === '/customer/order-history' 
     },
     { 
       text: 'Settings', 
@@ -124,9 +180,50 @@ const CustomerLayout = ({ children }) => {
           >
             <MenuIcon />
           </IconButton>
-          <Typography variant="h6" noWrap component="div">
+          <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
             Food Ordering System
           </Typography>
+          
+          {/* Profile menu */}
+          <Tooltip title="Account settings">
+            <IconButton 
+              onClick={handleProfileMenuOpen}
+              size="small"
+              sx={{ ml: 2 }}
+            >
+              {profilePic ? (
+                <Avatar 
+                  src={profilePic} 
+                  alt={currentUser?.firstName || 'User'}
+                  sx={{ width: 40, height: 40 }}
+                />
+              ) : (
+                <Avatar sx={{ width: 40, height: 40, bgcolor: theme.palette.primary.main }}>
+                  {currentUser?.firstName?.charAt(0) || 'U'}
+                </Avatar>
+              )}
+            </IconButton>
+          </Tooltip>
+          <Menu
+            anchorEl={anchorEl}
+            open={Boolean(anchorEl)}
+            onClose={handleMenuClose}
+            transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+            anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+          >
+            <MenuItem onClick={handleSettingsClick}>
+              <ListItemIcon>
+                <SettingsIcon fontSize="small" />
+              </ListItemIcon>
+              Settings
+            </MenuItem>
+            <MenuItem onClick={handleLogout}>
+              <ListItemIcon>
+                <LogoutIcon fontSize="small" />
+              </ListItemIcon>
+              Logout
+            </MenuItem>
+          </Menu>
         </Toolbar>
       </StyledAppBar>
       

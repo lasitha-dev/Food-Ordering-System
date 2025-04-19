@@ -24,6 +24,7 @@ const SET_TIP = 'SET_TIP';
 const SET_DELIVERY_FEE = 'SET_DELIVERY_FEE';
 const ADD_TO_ORDER_HISTORY = 'ADD_TO_ORDER_HISTORY';
 const UPDATE_ORDER_PAYMENT = 'UPDATE_ORDER_PAYMENT';
+const REMOVE_ORDER_FROM_HISTORY = 'REMOVE_ORDER_FROM_HISTORY';
 
 // Reducer function
 const cartReducer = (state, action) => {
@@ -116,6 +117,12 @@ const cartReducer = (state, action) => {
               }
             : order
         )
+      };
+
+    case REMOVE_ORDER_FROM_HISTORY:
+      return {
+        ...state,
+        orderHistory: (state.orderHistory || []).filter(order => order.id !== action.payload)
       };
 
     default:
@@ -221,6 +228,14 @@ export const CartProvider = ({ children }) => {
       }
     });
   };
+  
+  // Action for removing an order from history
+  const removeOrderFromHistory = (orderId) => {
+    dispatch({
+      type: REMOVE_ORDER_FROM_HISTORY,
+      payload: orderId
+    });
+  };
 
   return (
     <CartContext.Provider
@@ -233,7 +248,8 @@ export const CartProvider = ({ children }) => {
         setTip,
         setDeliveryFee,
         addToOrderHistory,
-        updateOrderPayment
+        updateOrderPayment,
+        removeOrderFromHistory
       }}
     >
       {children}

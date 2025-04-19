@@ -2,6 +2,7 @@ import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider as MuiThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
+import useMediaQuery from '@mui/material/useMediaQuery';
 
 // Import our custom ThemeProvider
 import { ThemeProvider, useTheme } from './context/ThemeContext';
@@ -34,6 +35,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import CustomerDashboard from './pages/customer/Dashboard';
 import CustomerCheckout from './pages/customer/Checkout';
 import CustomerSettings from './pages/customer/Settings';
+import OrderHistory from './pages/customer/OrderHistory';
 
 // Restaurant admin pages
 import RestaurantDashboard from './pages/restaurant/Dashboard';
@@ -231,6 +233,14 @@ const ThemedApp = () => {
               element={
                 <ProtectedRoute allowedRoles={['customer']}>
                   <CustomerCheckout />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/customer/order-history" 
+              element={
+                <ProtectedRoute allowedRoles={['customer']}>
+                  <OrderHistory />
                 </ProtectedRoute>
               } 
             />
