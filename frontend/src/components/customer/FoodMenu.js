@@ -22,10 +22,12 @@ import {
   InputAdornment,
   IconButton,
   Paper,
-  Skeleton
+  Skeleton,
+  Fab
 } from '@mui/material';
-import { Add, Remove, Search as SearchIcon } from '@mui/icons-material';
+import { Add, Remove, Search as SearchIcon, ShoppingCart as ShoppingCartIcon } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
+import { useNavigate } from 'react-router-dom';
 import foodItemApi from '../../services/restaurant-service/api';
 import { useCart } from '../../context/CartContext';
 
@@ -101,6 +103,7 @@ const FoodMenu = () => {
   const [categories, setCategories] = useState([]);
   
   const { addToCart } = useCart();
+  const navigate = useNavigate();
 
   // Fetch food items on component mount
   useEffect(() => {
@@ -169,6 +172,11 @@ const FoodMenu = () => {
       ...quantities,
       [item._id]: 1
     });
+  };
+
+  // Add function to handle checkout navigation
+  const handleGoToCheckout = () => {
+    navigate('/customer/checkout');
   };
 
   // Show loading skeleton while data is being fetched
@@ -360,6 +368,22 @@ const FoodMenu = () => {
           </Box>
         )}
       </Grid>
+      
+      {/* Fixed Checkout Button */}
+      <Fab
+        color="secondary"
+        variant="extended"
+        sx={{
+          position: 'fixed',
+          bottom: 24,
+          right: 24,
+          zIndex: 1000
+        }}
+        onClick={handleGoToCheckout}
+      >
+        <ShoppingCartIcon sx={{ mr: 1 }} />
+        Go to Checkout
+      </Fab>
     </Container>
   );
 };

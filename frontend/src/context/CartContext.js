@@ -11,7 +11,8 @@ const initialState = {
   tip: {
     amount: 0,
     percentage: 0
-  }
+  },
+  orderHistory: []
 };
 
 // Actions
@@ -21,6 +22,7 @@ const UPDATE_QUANTITY = 'UPDATE_QUANTITY';
 const CLEAR_CART = 'CLEAR_CART';
 const SET_TIP = 'SET_TIP';
 const SET_DELIVERY_FEE = 'SET_DELIVERY_FEE';
+const ADD_TO_ORDER_HISTORY = 'ADD_TO_ORDER_HISTORY';
 
 // Reducer function
 const cartReducer = (state, action) => {
@@ -78,7 +80,8 @@ const cartReducer = (state, action) => {
 
     case CLEAR_CART:
       return {
-        ...initialState
+        ...initialState,
+        orderHistory: state.orderHistory || [] // Preserve order history when clearing cart
       };
 
     case SET_TIP:
@@ -91,6 +94,12 @@ const cartReducer = (state, action) => {
       return {
         ...state,
         delivery: action.payload
+      };
+
+    case ADD_TO_ORDER_HISTORY:
+      return {
+        ...state,
+        orderHistory: [...(state.orderHistory || []), action.payload]
       };
 
     default:
@@ -119,11 +128,13 @@ export const CartProvider = ({ children }) => {
       const savedCart = localStorage.getItem('cart');
       if (savedCart) {
         const parsedCart = JSON.parse(savedCart);
-        // Ensure total is always a number
+        // Ensure required properties always exist
         return {
-          ...parsedCart,
+          ...initialState,  // First apply initialState to ensure all properties exist
+          ...parsedCart,    // Then override with saved values
           total: parsedCart.total || 0,
-          items: parsedCart.items || []
+          items: parsedCart.items || [],
+          orderHistory: parsedCart.orderHistory || []  // Ensure orderHistory always exists
         };
       }
       return initialState;
@@ -169,6 +180,19 @@ export const CartProvider = ({ children }) => {
     dispatch({ type: SET_DELIVERY_FEE, payload: deliveryData });
   };
 
+  // Action for adding to order history
+  const addToOrderHistory = (orderDetails) => {
+    dispatch({ 
+      type: ADD_TO_ORDER_HISTORY, 
+      payload: {
+        ...orderDetails,
+        id: Date.now().toString(), // Generate a unique ID
+        date: new Date().toISOString(),
+        status: 'Placed'
+      } 
+    });
+  };
+
   return (
     <CartContext.Provider
       value={{
@@ -178,7 +202,8 @@ export const CartProvider = ({ children }) => {
         updateQuantity,
         clearCart,
         setTip,
-        setDeliveryFee
+        setDeliveryFee,
+        addToOrderHistory
       }}
     >
       {children}

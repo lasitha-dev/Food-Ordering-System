@@ -32,6 +32,8 @@ import ProtectedRoute from './components/ProtectedRoute';
 
 // Customer pages
 import CustomerDashboard from './pages/customer/Dashboard';
+import CustomerCheckout from './pages/customer/Checkout';
+import CustomerSettings from './pages/customer/Settings';
 
 // Restaurant admin pages
 import RestaurantDashboard from './pages/restaurant/Dashboard';
@@ -212,15 +214,31 @@ const ThemedApp = () => {
               path="/customer" 
               element={
                 <ProtectedRoute allowedRoles={['customer']}>
+                  <Navigate to="/customer/dashboard" />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/customer/dashboard" 
+              element={
+                <ProtectedRoute allowedRoles={['customer']}>
                   <CustomerDashboard />
                 </ProtectedRoute>
               } 
             />
             <Route 
-              path="/customer/menu" 
+              path="/customer/checkout" 
               element={
                 <ProtectedRoute allowedRoles={['customer']}>
-                  <CustomerDashboard />
+                  <CustomerCheckout />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/customer/settings" 
+              element={
+                <ProtectedRoute allowedRoles={['customer']}>
+                  <CustomerSettings />
                 </ProtectedRoute>
               } 
             />
