@@ -60,28 +60,34 @@ const protect = async (req, res, next) => {
   }
 };
 
-// Middleware to restrict access to restaurant admin role
-const restaurantAdmin = (req, res, next) => {
-  if (!req.user) {
-    console.error('User object not found in request');
-    return res.status(401).json({
-      success: false,
-      message: 'Not authorized, user not found'
-    });
-  }
-  
-  console.log('Checking user role:', req.user);
-  
-  // Check the userType property instead of role
-  if (req.user.userType === 'restaurant-admin') {
-    return next();
-  } else {
-    console.error('User is not a restaurant admin:', req.user.userType);
-    return res.status(403).json({
-      success: false,
-      message: 'Not authorized as restaurant admin'
-    });
-  }
+// Middleware to restrict access to specific roles
+const authorize = (...roles) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      console.error('User object not found in request');
+      return res.status(401).json({
+        success: false,
+        message: 'Not authorized, user not found'
+      });
+    }
+    
+    console.log('Checking user role:', req.user.userType);
+    
+    if (roles.includes(req.user.userType)) {
+      return next();
+    } else {
+      console.error(`User is not authorized. Required roles: ${roles.join(', ')}, User role: ${req.user.userType}`);
+      return res.status(403).json({
+        success: false,
+        message: `Not authorized as ${roles.join(' or ')}`
+      });
+    }
+  };
 };
 
-module.exports = { protect, restaurantAdmin }; 
+// Legacy middleware for backward compatibility 
+const restaurantAdmin = (req, res, next) => {
+  return authorize('restaurant-admin')(req, res, next);
+};
+
+module.exports = { protect, restaurantAdmin, authorize }; 

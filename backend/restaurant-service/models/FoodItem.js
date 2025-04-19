@@ -16,6 +16,11 @@ const foodItemSchema = new mongoose.Schema({
     required: [true, 'Food category is required'],
     trim: true
   },
+  price: {
+    type: Number,
+    required: [true, 'Food item price is required'],
+    min: [0, 'Price cannot be negative']
+  },
   imageUrl: {
     type: String,
     required: false,

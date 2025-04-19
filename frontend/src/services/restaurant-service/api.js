@@ -93,6 +93,19 @@ const foodItemApi = {
     }
   },
 
+  // Get all food items for customers (public endpoint)
+  getPublicFoodItems: async () => {
+    try {
+      console.log('API Call: Get public food items');
+      const response = await apiClient.get('/api/food-items/public');
+      return response.data;
+    } catch (error) {
+      console.error('Error in getPublicFoodItems API call:', error);
+      // Re-throw for component to handle
+      throw error;
+    }
+  },
+
   // Get a single food item by ID
   getFoodItemById: async (id) => {
     try {

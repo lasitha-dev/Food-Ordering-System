@@ -50,6 +50,10 @@ const foodItemSchema = Yup.object().shape({
   category: Yup.string()
     .required('Category is required')
     .oneOf(foodCategories, 'Invalid category selected'),
+  price: Yup.number()
+    .required('Price is required')
+    .positive('Price must be positive')
+    .typeError('Price must be a number'),
   imageUrl: Yup.string()
     .url('Must be a valid URL')
     .nullable()
@@ -75,6 +79,7 @@ const FoodItemForm = () => {
       title: '',
       description: '',
       category: '',
+      price: '',
       imageUrl: ''
     },
     validationSchema: foodItemSchema,
@@ -104,6 +109,7 @@ const FoodItemForm = () => {
           title: response.data.title || '',
           description: response.data.description || '',
           category: response.data.category || '',
+          price: response.data.price || '',
           imageUrl: response.data.imageUrl || ''
         });
         
@@ -260,6 +266,24 @@ const FoodItemForm = () => {
                 rows={4}
                 disabled={loading}
                 required
+              />
+            </Grid>
+
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                id="price"
+                name="price"
+                label="Price ($)"
+                type="number"
+                value={formik.values.price}
+                onChange={formik.handleChange}
+                onBlur={formik.handleBlur}
+                error={formik.touched.price && Boolean(formik.errors.price)}
+                helperText={formik.touched.price && formik.errors.price}
+                disabled={loading}
+                required
+                inputProps={{ min: 0, step: 0.01 }}
               />
             </Grid>
 

@@ -6,6 +6,9 @@ import CssBaseline from '@mui/material/CssBaseline';
 // Import our custom ThemeProvider
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 
+// Import the CartProvider
+import { CartProvider } from './context/CartContext';
+
 // Layout components
 import MainLayout from './components/layouts/MainLayout';
 import AdminLayout from './components/layouts/AdminLayout';
@@ -176,84 +179,92 @@ const ThemedApp = () => {
   return (
     <MuiThemeProvider theme={theme}>
       <CssBaseline />
-      <Routes>
-        {/* Public routes */}
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/change-password" element={<ChangePassword />} />
-        
-        {/* Main layout with protected routes */}
-        <Route element={<MainLayout />}>
-          <Route index element={<Navigate to="/login" />} />
+      <CartProvider>
+        <Routes>
+          {/* Public routes */}
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/change-password" element={<ChangePassword />} />
           
-          {/* Admin routes */}
-          <Route 
-            path="/admin" 
-            element={
-              <ProtectedRoute allowedRoles={['admin']}>
-                <AdminLayout />
-              </ProtectedRoute>
-            }
-          >
-            <Route index element={<AdminDashboard />} />
-            <Route path="users" element={<UserManagement />} />
-            <Route path="users/create" element={<CreateUser />} />
-            <Route path="users/:id/edit" element={<EditUser />} />
-            <Route path="settings" element={<Settings />} />
+          {/* Main layout with protected routes */}
+          <Route element={<MainLayout />}>
+            <Route index element={<Navigate to="/login" />} />
+            
+            {/* Admin routes */}
+            <Route 
+              path="/admin" 
+              element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <AdminLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route index element={<AdminDashboard />} />
+              <Route path="users" element={<UserManagement />} />
+              <Route path="users/create" element={<CreateUser />} />
+              <Route path="users/:id/edit" element={<EditUser />} />
+              <Route path="settings" element={<Settings />} />
+            </Route>
+            
+            {/* Customer routes */}
+            <Route 
+              path="/customer" 
+              element={
+                <ProtectedRoute allowedRoles={['customer']}>
+                  <CustomerDashboard />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/customer/menu" 
+              element={
+                <ProtectedRoute allowedRoles={['customer']}>
+                  <CustomerDashboard />
+                </ProtectedRoute>
+              } 
+            />
+            
+            {/* Restaurant admin routes */}
+            <Route 
+              path="/restaurant" 
+              element={
+                <ProtectedRoute allowedRoles={['restaurant-admin']}>
+                  <RestaurantLayout />
+                </ProtectedRoute>
+              } 
+            >
+              <Route index element={<RestaurantDashboard />} />
+              <Route path="food-items" element={<FoodItems />} />
+              <Route path="food-items/create" element={<CreateFoodItem />} />
+              <Route path="food-items/edit/:id" element={<EditFoodItem />} />
+              <Route path="settings" element={<RestaurantSettings />} />
+            </Route>
+            
+            {/* Delivery personnel routes */}
+            <Route 
+              path="/delivery" 
+              element={
+                <ProtectedRoute allowedRoles={['delivery-personnel']}>
+                  <DeliveryDashboard />
+                </ProtectedRoute>
+              } 
+            />
           </Route>
           
-          {/* Customer routes */}
-          <Route 
-            path="/customer" 
-            element={
-              <ProtectedRoute allowedRoles={['customer']}>
-                <CustomerDashboard />
-              </ProtectedRoute>
-            } 
-          />
-          
-          {/* Restaurant admin routes */}
-          <Route 
-            path="/restaurant" 
-            element={
-              <ProtectedRoute allowedRoles={['restaurant-admin']}>
-                <RestaurantLayout />
-              </ProtectedRoute>
-            } 
-          >
-            <Route index element={<RestaurantDashboard />} />
-            <Route path="food-items" element={<FoodItems />} />
-            <Route path="food-items/create" element={<CreateFoodItem />} />
-            <Route path="food-items/edit/:id" element={<EditFoodItem />} />
-            <Route path="settings" element={<RestaurantSettings />} />
-          </Route>
-          
-          {/* Delivery personnel routes */}
-          <Route 
-            path="/delivery" 
-            element={
-              <ProtectedRoute allowedRoles={['delivery-personnel']}>
-                <DeliveryDashboard />
-              </ProtectedRoute>
-            } 
-          />
-        </Route>
-        
-        {/* Redirect unknown routes to login */}
-        <Route path="*" element={<Navigate to="/login" />} />
-      </Routes>
+          {/* Redirect unknown routes to login */}
+          <Route path="*" element={<Navigate to="/login" />} />
+        </Routes>
+      </CartProvider>
     </MuiThemeProvider>
   );
 };
 
 // Root App component wrapped in ThemeProvider
-function App() {
-  return (
-    <ThemeProvider>
-      <ThemedApp />
-    </ThemeProvider>
-  );
-}
+const App = () => (
+  <ThemeProvider>
+    <ThemedApp />
+  </ThemeProvider>
+);
 
 export default App; 

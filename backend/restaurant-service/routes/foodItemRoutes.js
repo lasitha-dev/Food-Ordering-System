@@ -1,27 +1,24 @@
 const express = require('express');
-const router = express.Router();
 const { 
-  createFoodItem, 
-  getFoodItems, 
-  getFoodItemById, 
-  updateFoodItem, 
-  deleteFoodItem 
+  getFoodItems,
+  getFoodItemById,
+  createFoodItem,
+  updateFoodItem,
+  deleteFoodItem,
+  getPublicFoodItems
 } = require('../controllers/foodItemController');
-const { protect, restaurantAdmin } = require('../middleware/authMiddleware');
+const { protect, authorize } = require('../middleware/authMiddleware');
 
-// Apply middleware to all routes
-router.use(protect);
-router.use(restaurantAdmin);
+const router = express.Router();
 
-// Routes for /api/food-items
-router.route('/')
-  .post(createFoodItem)
-  .get(getFoodItems);
+// Public routes
+router.get('/public', getPublicFoodItems);
 
-// Routes for /api/food-items/:id
-router.route('/:id')
-  .get(getFoodItemById)
-  .put(updateFoodItem)
-  .delete(deleteFoodItem);
+// Protected routes - Restaurant Admin only
+router.get('/', protect, authorize('restaurant-admin'), getFoodItems);
+router.get('/:id', protect, authorize('restaurant-admin'), getFoodItemById);
+router.post('/', protect, authorize('restaurant-admin'), createFoodItem);
+router.put('/:id', protect, authorize('restaurant-admin'), updateFoodItem);
+router.delete('/:id', protect, authorize('restaurant-admin'), deleteFoodItem);
 
 module.exports = router; 

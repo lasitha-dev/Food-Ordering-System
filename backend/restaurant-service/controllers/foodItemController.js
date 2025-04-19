@@ -5,13 +5,14 @@ const FoodItem = require('../models/FoodItem');
 // @access  Private (Restaurant Admin)
 const createFoodItem = async (req, res) => {
   try {
-    const { title, description, category, imageUrl } = req.body;
+    const { title, description, category, price, imageUrl } = req.body;
     
     // Create new food item
     const foodItem = await FoodItem.create({
       title,
       description,
       category,
+      price: price || 0,
       imageUrl: imageUrl || '',
       createdBy: req.user.id // User ID from auth middleware
     });
@@ -39,24 +40,44 @@ const createFoodItem = async (req, res) => {
   }
 };
 
-// @desc    Get all food items created by the authenticated restaurant admin
+// @desc    Get all food items - for restaurant admins
 // @route   GET /api/food-items
-// @access  Private (Restaurant Admin)
+// @access  Private (restaurant-admin)
 const getFoodItems = async (req, res) => {
   try {
-    // Find all food items created by the authenticated user
-    const foodItems = await FoodItem.find({ createdBy: req.user.id });
+    const foodItems = await FoodItem.find();
     
     res.status(200).json({
       success: true,
       count: foodItems.length,
       data: foodItems
     });
-  } catch (error) {
-    console.error('Error getting food items:', error.message);
+  } catch (err) {
+    console.error(err);
     res.status(500).json({
       success: false,
-      message: 'Server Error'
+      message: 'Server error'
+    });
+  }
+};
+
+// @desc    Get all food items - public endpoint for customers
+// @route   GET /api/food-items/public
+// @access  Public
+const getPublicFoodItems = async (req, res) => {
+  try {
+    const foodItems = await FoodItem.find();
+    
+    res.status(200).json({
+      success: true,
+      count: foodItems.length,
+      data: foodItems
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
     });
   }
 };
@@ -221,6 +242,7 @@ const deleteFoodItem = async (req, res) => {
 module.exports = {
   createFoodItem,
   getFoodItems,
+  getPublicFoodItems,
   getFoodItemById,
   updateFoodItem,
   deleteFoodItem
