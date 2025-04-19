@@ -30,7 +30,8 @@ import {
   Delete as DeleteIcon, 
   ExpandMore as ExpandMoreIcon, 
   CheckCircle as CheckCircleIcon,
-  AccessTime as AccessTimeIcon
+  AccessTime as AccessTimeIcon,
+  CreditCard as CreditCardIcon
 } from '@mui/icons-material';
 import { useCart } from '../../context/CartContext';
 import { styled } from '@mui/material/styles';
@@ -513,6 +514,18 @@ const OrderConfirmation = ({ orderComplete, orderHistory }) => {
     const dateB = new Date(b.date || 0);
     return dateB - dateA;
   });
+
+  // Payment portal handling
+  const [paymentProcessing, setPaymentProcessing] = useState(false);
+  
+  const handlePaymentPortal = (orderId) => {
+    setPaymentProcessing(true);
+    // Simulate payment processing
+    setTimeout(() => {
+      setPaymentProcessing(false);
+      alert("Payment processed successfully!");
+    }, 2000);
+  };
   
   return (
     <Box>
@@ -526,11 +539,34 @@ const OrderConfirmation = ({ orderComplete, orderHistory }) => {
             <Typography variant="body1" paragraph>
               Your order has been received and is being processed.
             </Typography>
+            {latestOrder && latestOrder.paymentMethod === 'card' && (
+              <Box sx={{ mt: 2, mb: 3 }}>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  Please complete your payment to process your order.
+                </Typography>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  size="large"
+                  onClick={() => handlePaymentPortal(latestOrder.id)}
+                  disabled={paymentProcessing}
+                  sx={{ 
+                    px: 4,
+                    boxShadow: 3,
+                    '&:hover': {
+                      boxShadow: 6
+                    }
+                  }}
+                >
+                  {paymentProcessing ? 'Processing...' : 'Proceed to Payment Portal'}
+                </Button>
+              </Box>
+            )}
             <Typography variant="body2" color="textSecondary">
               You will receive a confirmation email with your order details.
             </Typography>
             <Button 
-              variant="contained" 
+              variant="outlined" 
               color="primary" 
               href="/customer/dashboard" 
               sx={{ mt: 3 }}
@@ -637,13 +673,29 @@ const OrderConfirmation = ({ orderComplete, orderHistory }) => {
                     <Typography variant="body2">
                       Payment Method: <strong>{order.paymentMethod === 'card' ? 'Credit/Debit Card' : 'Cash on Delivery'}</strong>
                     </Typography>
-                    <Chip
-                      size="small"
-                      icon={<AccessTimeIcon />}
-                      label="Track Order"
-                      color="primary"
-                      clickable
-                    />
+                    
+                    {order.paymentMethod === 'card' && (
+                      <Button
+                        variant="contained"
+                        color="primary"
+                        size="small"
+                        startIcon={<CreditCardIcon />}
+                        onClick={() => handlePaymentPortal(order.id)}
+                        disabled={paymentProcessing}
+                      >
+                        {paymentProcessing ? 'Processing...' : 'Pay Now'}
+                      </Button>
+                    )}
+                    
+                    {order.paymentMethod !== 'card' && (
+                      <Chip
+                        size="small"
+                        icon={<AccessTimeIcon />}
+                        label="Track Order"
+                        color="primary"
+                        clickable
+                      />
+                    )}
                   </Box>
                 </AccordionDetails>
               </Accordion>
