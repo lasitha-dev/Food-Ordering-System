@@ -23,6 +23,7 @@ const CLEAR_CART = 'CLEAR_CART';
 const SET_TIP = 'SET_TIP';
 const SET_DELIVERY_FEE = 'SET_DELIVERY_FEE';
 const ADD_TO_ORDER_HISTORY = 'ADD_TO_ORDER_HISTORY';
+const UPDATE_ORDER_PAYMENT = 'UPDATE_ORDER_PAYMENT';
 
 // Reducer function
 const cartReducer = (state, action) => {
@@ -100,6 +101,21 @@ const cartReducer = (state, action) => {
       return {
         ...state,
         orderHistory: [...(state.orderHistory || []), action.payload]
+      };
+
+    case UPDATE_ORDER_PAYMENT:
+      return {
+        ...state,
+        orderHistory: (state.orderHistory || []).map(order => 
+          order.id === action.payload.orderId
+            ? { 
+                ...order, 
+                paymentStatus: 'paid',
+                paymentId: action.payload.paymentId,
+                paymentDate: action.payload.paymentDate 
+              }
+            : order
+        )
       };
 
     default:
@@ -188,8 +204,21 @@ export const CartProvider = ({ children }) => {
         ...orderDetails,
         id: Date.now().toString(), // Generate a unique ID
         date: new Date().toISOString(),
-        status: 'Placed'
+        status: 'Placed',
+        paymentStatus: orderDetails.paymentMethod === 'cash' ? 'pending' : 'unpaid'
       } 
+    });
+  };
+  
+  // Action for updating order payment
+  const updateOrderPayment = (orderId, paymentDetails) => {
+    dispatch({
+      type: UPDATE_ORDER_PAYMENT,
+      payload: {
+        orderId,
+        paymentId: paymentDetails.paymentId,
+        paymentDate: new Date().toISOString()
+      }
     });
   };
 
@@ -203,7 +232,8 @@ export const CartProvider = ({ children }) => {
         clearCart,
         setTip,
         setDeliveryFee,
-        addToOrderHistory
+        addToOrderHistory,
+        updateOrderPayment
       }}
     >
       {children}

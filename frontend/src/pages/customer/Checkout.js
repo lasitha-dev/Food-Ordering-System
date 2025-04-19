@@ -37,6 +37,7 @@ import { useCart } from '../../context/CartContext';
 import { styled } from '@mui/material/styles';
 import CustomerLayout from '../../components/layouts/CustomerLayout';
 import { format as formatDate } from 'date-fns';
+import PaymentPortal from '../../components/payment/PaymentPortal';
 
 const OrderSummaryPaper = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(3),
@@ -69,7 +70,7 @@ const steps = ['Review Order', 'Delivery Details', 'Payment', 'Confirmation'];
 const CHECKOUT_STATE_KEY = 'checkout_state';
 
 const Checkout = () => {
-  const { cart, updateQuantity, removeFromCart, clearCart, addToOrderHistory } = useCart();
+  const { cart, updateQuantity, removeFromCart, clearCart, addToOrderHistory, updateOrderPayment } = useCart();
   
   // Initialize state from localStorage if available
   const [activeStep, setActiveStep] = useState(() => {
@@ -506,6 +507,7 @@ const PaymentDetails = ({ paymentMethod, setPaymentMethod }) => {
 
 // Order Confirmation Component
 const OrderConfirmation = ({ orderComplete, orderHistory }) => {
+  const { updateOrderPayment } = useCart();
   const latestOrder = orderHistory.length > 0 ? orderHistory[orderHistory.length - 1] : null;
   
   // Sort orders by date (newest first)
@@ -515,16 +517,36 @@ const OrderConfirmation = ({ orderComplete, orderHistory }) => {
     return dateB - dateA;
   });
 
-  // Payment portal handling
-  const [paymentProcessing, setPaymentProcessing] = useState(false);
+  // Payment portal state
+  const [paymentPortalOpen, setPaymentPortalOpen] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState(null);
   
-  const handlePaymentPortal = (orderId) => {
-    setPaymentProcessing(true);
-    // Simulate payment processing
-    setTimeout(() => {
-      setPaymentProcessing(false);
-      alert("Payment processed successfully!");
-    }, 2000);
+  const handleOpenPaymentPortal = (order) => {
+    setSelectedOrder(order);
+    setPaymentPortalOpen(true);
+  };
+  
+  const handleClosePaymentPortal = () => {
+    setPaymentPortalOpen(false);
+  };
+  
+  const handlePaymentSuccess = (paymentResult) => {
+    // Add defensive code to handle undefined paymentResult
+    if (!paymentResult) {
+      console.error('Payment result is undefined');
+      return;
+    }
+    
+    // Update the order payment status in the cart context
+    updateOrderPayment(paymentResult.orderId, {
+      paymentId: paymentResult.paymentId || `manual_${Date.now()}`,
+      amount: paymentResult.amount || 0
+    });
+  };
+  
+  // Check if an order has been paid
+  const isOrderPaid = (order) => {
+    return order.paymentStatus === 'paid';
   };
   
   return (
@@ -539,7 +561,7 @@ const OrderConfirmation = ({ orderComplete, orderHistory }) => {
             <Typography variant="body1" paragraph>
               Your order has been received and is being processed.
             </Typography>
-            {latestOrder && latestOrder.paymentMethod === 'card' && (
+            {latestOrder && latestOrder.paymentMethod === 'card' && !isOrderPaid(latestOrder) && (
               <Box sx={{ mt: 2, mb: 3 }}>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                   Please complete your payment to process your order.
@@ -548,8 +570,7 @@ const OrderConfirmation = ({ orderComplete, orderHistory }) => {
                   variant="contained"
                   color="primary"
                   size="large"
-                  onClick={() => handlePaymentPortal(latestOrder.id)}
-                  disabled={paymentProcessing}
+                  onClick={() => handleOpenPaymentPortal(latestOrder)}
                   sx={{ 
                     px: 4,
                     boxShadow: 3,
@@ -558,9 +579,14 @@ const OrderConfirmation = ({ orderComplete, orderHistory }) => {
                     }
                   }}
                 >
-                  {paymentProcessing ? 'Processing...' : 'Proceed to Payment Portal'}
+                  Proceed to Payment Portal
                 </Button>
               </Box>
+            )}
+            {latestOrder && isOrderPaid(latestOrder) && (
+              <Alert severity="success" sx={{ mt: 2, mb: 3 }}>
+                Payment completed successfully! Your order is being processed.
+              </Alert>
             )}
             <Typography variant="body2" color="textSecondary">
               You will receive a confirmation email with your order details.
@@ -599,8 +625,8 @@ const OrderConfirmation = ({ orderComplete, orderHistory }) => {
                   </Typography>
                   <OrderStatusChip 
                     size="small" 
-                    label={order.status || 'Placed'} 
-                    status={order.status || 'Placed'}
+                    label={isOrderPaid(order) ? 'Paid' : order.status || 'Placed'} 
+                    status={isOrderPaid(order) ? 'Paid' : order.status || 'Placed'}
                     icon={<CheckCircleIcon />}
                   />
                 </Box>
@@ -674,24 +700,23 @@ const OrderConfirmation = ({ orderComplete, orderHistory }) => {
                       Payment Method: <strong>{order.paymentMethod === 'card' ? 'Credit/Debit Card' : 'Cash on Delivery'}</strong>
                     </Typography>
                     
-                    {order.paymentMethod === 'card' && (
+                    {order.paymentMethod === 'card' && !isOrderPaid(order) && (
                       <Button
                         variant="contained"
                         color="primary"
                         size="small"
                         startIcon={<CreditCardIcon />}
-                        onClick={() => handlePaymentPortal(order.id)}
-                        disabled={paymentProcessing}
+                        onClick={() => handleOpenPaymentPortal(order)}
                       >
-                        {paymentProcessing ? 'Processing...' : 'Pay Now'}
+                        Pay Now
                       </Button>
                     )}
                     
-                    {order.paymentMethod !== 'card' && (
+                    {(order.paymentMethod !== 'card' || isOrderPaid(order)) && (
                       <Chip
                         size="small"
                         icon={<AccessTimeIcon />}
-                        label="Track Order"
+                        label={isOrderPaid(order) ? "Track Order" : "Track Order"}
                         color="primary"
                         clickable
                       />
@@ -709,6 +734,14 @@ const OrderConfirmation = ({ orderComplete, orderHistory }) => {
           </Typography>
         </Paper>
       )}
+      
+      {/* Payment Portal */}
+      <PaymentPortal
+        open={paymentPortalOpen}
+        onClose={handleClosePaymentPortal}
+        order={selectedOrder}
+        onPaymentSuccess={handlePaymentSuccess}
+      />
     </Box>
   );
 };
