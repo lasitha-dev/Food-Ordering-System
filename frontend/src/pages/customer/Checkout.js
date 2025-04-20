@@ -73,8 +73,26 @@ const OrderStatusChip = styled(Chip)(({ theme, status }) => ({
 
 const steps = ['Review Order', 'Delivery Details', 'Payment', 'Confirmation'];
 
-// Key for storing checkout state in localStorage
-const CHECKOUT_STATE_KEY = 'checkout_state';
+// Key for storing checkout state in localStorage - will be appended with user ID
+const CHECKOUT_STATE_BASE_KEY = 'checkout_state';
+
+// Get user-specific checkout state key
+const getCheckoutStateKey = () => {
+  try {
+    const savedUser = localStorage.getItem('user');
+    if (savedUser) {
+      const userObj = JSON.parse(savedUser);
+      const userId = userObj._id || userObj.id;
+      if (userId) {
+        return `${CHECKOUT_STATE_BASE_KEY}_${userId}`;
+      }
+    }
+    return CHECKOUT_STATE_BASE_KEY;
+  } catch (e) {
+    console.error('Error getting checkout state key:', e);
+    return CHECKOUT_STATE_BASE_KEY;
+  }
+};
 
 // Replace makeStyles with styled components
 const OrderHistoryItemContainer = styled(Box)(({ theme }) => ({
@@ -97,6 +115,14 @@ const Checkout = () => {
   const { cart, updateQuantity, removeFromCart, clearCart, addToOrderHistory, updateOrderPayment, removeOrderFromHistory } = useCart();
   const navigate = useNavigate();
   
+  // User-specific checkout state key
+  const [checkoutStateKey, setCheckoutStateKey] = useState(getCheckoutStateKey());
+  
+  // Update checkout state key when user changes
+  useEffect(() => {
+    setCheckoutStateKey(getCheckoutStateKey());
+  }, []);
+  
   // Track cart items for changes
   const [previousCartItemIds, setPreviousCartItemIds] = useState(() => {
     // Initialize with current cart items
@@ -105,7 +131,7 @@ const Checkout = () => {
   
   // Initialize state from localStorage if available
   const [activeStep, setActiveStep] = useState(() => {
-    const savedState = localStorage.getItem(CHECKOUT_STATE_KEY);
+    const savedState = localStorage.getItem(checkoutStateKey);
     if (savedState) {
       const { step } = JSON.parse(savedState);
       return step || 0;
@@ -119,7 +145,23 @@ const Checkout = () => {
       const savedUser = localStorage.getItem('user');
       if (savedUser) {
         const userObj = JSON.parse(savedUser);
+        const userId = userObj._id || userObj.id;
+        
+        // Try to get user-specific address first
+        if (userId) {
+          const userAddressKey = `delivery_address_${userId}`;
+          const savedAddress = localStorage.getItem(userAddressKey);
+          if (savedAddress) {
+            return savedAddress;
+          }
+        }
+        
+        // Fallback to profile data if available
         if (userObj.defaultDeliveryAddress) {
+          // Save it to the user-specific key for future use
+          if (userId) {
+            localStorage.setItem(`delivery_address_${userId}`, userObj.defaultDeliveryAddress);
+          }
           return userObj.defaultDeliveryAddress;
         }
       }
@@ -131,7 +173,7 @@ const Checkout = () => {
   };
   
   const [deliveryAddress, setDeliveryAddress] = useState(() => {
-    const savedState = localStorage.getItem(CHECKOUT_STATE_KEY);
+    const savedState = localStorage.getItem(checkoutStateKey);
     if (savedState) {
       const { address } = JSON.parse(savedState);
       return address || getDefaultAddress();
@@ -139,8 +181,27 @@ const Checkout = () => {
     return getDefaultAddress();
   });
   
+  // Update delivery address function to save to user-specific storage
+  const updateDeliveryAddress = (address) => {
+    setDeliveryAddress(address);
+    
+    // Also save to user-specific storage
+    try {
+      const savedUser = localStorage.getItem('user');
+      if (savedUser) {
+        const userObj = JSON.parse(savedUser);
+        const userId = userObj._id || userObj.id;
+        if (userId && address) {
+          localStorage.setItem(`delivery_address_${userId}`, address);
+        }
+      }
+    } catch (e) {
+      console.error('Error saving address to user storage:', e);
+    }
+  };
+  
   const [additionalInstructions, setAdditionalInstructions] = useState(() => {
-    const savedState = localStorage.getItem(CHECKOUT_STATE_KEY);
+    const savedState = localStorage.getItem(checkoutStateKey);
     if (savedState) {
       const { instructions } = JSON.parse(savedState);
       return instructions || '';
@@ -149,7 +210,7 @@ const Checkout = () => {
   });
   
   const [paymentMethod, setPaymentMethod] = useState(() => {
-    const savedState = localStorage.getItem(CHECKOUT_STATE_KEY);
+    const savedState = localStorage.getItem(checkoutStateKey);
     if (savedState) {
       const { payment } = JSON.parse(savedState);
       return payment || '';
@@ -186,15 +247,15 @@ const Checkout = () => {
       payment: paymentMethod
     };
     
-    localStorage.setItem(CHECKOUT_STATE_KEY, JSON.stringify(checkoutState));
-  }, [activeStep, deliveryAddress, additionalInstructions, paymentMethod]);
+    localStorage.setItem(checkoutStateKey, JSON.stringify(checkoutState));
+  }, [activeStep, deliveryAddress, additionalInstructions, paymentMethod, checkoutStateKey]);
   
   // Clear checkout state when order is complete
   useEffect(() => {
     if (orderComplete) {
-      localStorage.removeItem(CHECKOUT_STATE_KEY);
+      localStorage.removeItem(checkoutStateKey);
     }
-  }, [orderComplete]);
+  }, [orderComplete, checkoutStateKey]);
 
   // Calculate totals
   const subtotal = cart.total || 0;
@@ -266,8 +327,9 @@ const Checkout = () => {
       case 1:
         return (
           <DeliveryDetails 
-            deliveryAddress={deliveryAddress} 
+            deliveryAddress={deliveryAddress}
             setDeliveryAddress={setDeliveryAddress}
+            updateDeliveryAddress={updateDeliveryAddress}
             additionalInstructions={additionalInstructions}
             setAdditionalInstructions={setAdditionalInstructions}
           />
@@ -502,7 +564,7 @@ const OrderSummary = ({ cart, subtotal, deliveryFee, tipAmount, totalAmount }) =
 };
 
 // Delivery Details Component
-const DeliveryDetails = ({ deliveryAddress, setDeliveryAddress, additionalInstructions, setAdditionalInstructions }) => {
+const DeliveryDetails = ({ deliveryAddress, setDeliveryAddress, updateDeliveryAddress, additionalInstructions, setAdditionalInstructions }) => {
   const [usingDefault, setUsingDefault] = useState(true);
   const [defaultAddress, setDefaultAddress] = useState('');
   
@@ -527,13 +589,11 @@ const DeliveryDetails = ({ deliveryAddress, setDeliveryAddress, additionalInstru
   }, [deliveryAddress]);
   
   const handleAddressChange = (e) => {
-    setDeliveryAddress(e.target.value);
-    // If the address is changed manually, it's no longer the default
-    setUsingDefault(false);
+    updateDeliveryAddress(e.target.value);
   };
   
   const useDefaultAddress = () => {
-    setDeliveryAddress(defaultAddress);
+    updateDeliveryAddress(defaultAddress);
     setUsingDefault(true);
   };
 

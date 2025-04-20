@@ -1,0 +1,28 @@
+{
+  "name": "food-ordering-system",
+  "version": "1.0.0",
+  "description": "Food ordering system with multiple services",
+  "scripts": {
+    "start:frontend": "cd frontend && npm start",
+    "start:order-service": "cd backend/order-service && npm run dev",
+    "start:auth-service": "cd backend/auth-service && npm run dev",
+    "start:restaurant-service": "cd backend/restaurant-service && npm run dev",
+    "start:all-services": "concurrently \"npm run start:auth-service\" \"npm run start:order-service\" \"npm run start:restaurant-service\"",
+    "start": "concurrently \"npm run start:all-services\" \"npm run start:frontend\"",
+    "install:all": "npm install && cd frontend && npm install && cd ../backend/order-service && npm install && cd ../auth-service && npm install && cd ../restaurant-service && npm install",
+    "install:nodemon": "npm install -g nodemon",
+    
+    "docker:build": "docker-compose build",
+    "docker:up": "docker-compose up",
+    "docker:down": "docker-compose down",
+    
+    "k8s:build-images": "docker build -t food-ordering-frontend:latest ./frontend && docker build -t food-ordering-order-service:latest ./backend/order-service && docker build -t food-ordering-auth-service:latest ./backend/auth-service && docker build -t food-ordering-restaurant-service:latest ./backend/restaurant-service",
+    "k8s:deploy": "chmod +x ./kubernetes/build-and-deploy.sh && ./kubernetes/build-and-deploy.sh",
+    "k8s:apply": "kubectl apply -f kubernetes/ --selector=app!=mongodb",
+    "k8s:delete": "kubectl delete namespace food-ordering-system",
+    "k8s:status": "kubectl get all -n food-ordering-system"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+} 

@@ -423,25 +423,60 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Logout function
+  // Logout the user
   const logout = async () => {
     try {
-      // Call logout endpoint to invalidate token on the server
-      await authApi.logout();
-    } catch (error) {
-      console.error('Logout error:', error);
-    } finally {
-      // Remove token from localStorage
-      localStorage.removeItem('token');
+      // Get user ID before logout to clear associated cart
+      const savedUser = localStorage.getItem('user');
+      let userId = null;
       
-      // DON'T remove user profile data anymore - keep it for persistence
-      // localStorage.removeItem('userProfile');
+      if (savedUser) {
+        try {
+          const user = JSON.parse(savedUser);
+          userId = user._id || user.id;
+        } catch (error) {
+          console.error('Error parsing user for cart cleanup:', error);
+        }
+      }
       
-      // Remove authorization header
-      delete axios.defaults.headers.common['Authorization'];
+      // Clear tokens and user from localStorage
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      localStorage.removeItem('token'); // For backward compatibility
+      
+      // Clear all user-specific data from localStorage
+      if (userId) {
+        // Clear user-specific cart
+        localStorage.removeItem(`cart_${userId}`);
+        
+        // Clear user-specific checkout state
+        localStorage.removeItem(`checkout_state_${userId}`);
+        
+        // Clear user-specific delivery address
+        localStorage.removeItem(`delivery_address_${userId}`);
+        
+        // Clear any other user-specific data
+        // (iterate through localStorage to find and remove items with user ID)
+        Object.keys(localStorage).forEach(key => {
+          if (key.includes(userId)) {
+            localStorage.removeItem(key);
+          }
+        });
+      }
+      
+      // Finally remove the user object itself
+      localStorage.removeItem('user');
       
       // Clear user state
       setCurrentUser(null);
+      setLoading(false);
+      setError(null);
+      
+      return true;
+    } catch (error) {
+      console.error('Logout error:', error);
+      setError('An error occurred during logout');
+      return false;
     }
   };
 

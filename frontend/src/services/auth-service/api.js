@@ -1,8 +1,33 @@
 import axios from 'axios';
 
+// Get the base URL from environment variables or use a default
+const AUTH_BASE_URL = process.env.REACT_APP_AUTH_URL || 'http://localhost:3001';
 const API_URL = '/api/auth';
 const USERS_URL = '/api/users';
 const ADMIN_URL = '/api/admin';
+
+// Create a dedicated axios instance for auth service
+const authAxios = axios.create({
+  baseURL: AUTH_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json'
+  }
+});
+
+// Add request interceptor to include auth token
+authAxios.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('accessToken');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
 
 // Auth API calls
 export const login = async (credentials) => {
@@ -20,7 +45,7 @@ export const login = async (credentials) => {
       data: JSON.stringify(credentials)
     });
     
-    const response = await axios.post(`${API_URL}/login`, credentials);
+    const response = await authAxios.post(`${API_URL}/login`, credentials);
     
     console.log('Login response status:', response.status);
     console.log('Login response headers:', response.headers);
@@ -42,7 +67,7 @@ export const login = async (credentials) => {
 
 export const register = async (userData) => {
   try {
-    const response = await axios.post(`${API_URL}/register`, userData);
+    const response = await authAxios.post(`${API_URL}/register`, userData);
     return response.data;
   } catch (error) {
     throw error.response?.data || { success: false, message: 'Network error' };
@@ -51,7 +76,7 @@ export const register = async (userData) => {
 
 export const logout = async () => {
   try {
-    const response = await axios.post(`${API_URL}/logout`);
+    const response = await authAxios.post(`${API_URL}/logout`);
     return response.data;
   } catch (error) {
     throw error.response?.data || { success: false, message: 'Network error' };
@@ -60,7 +85,7 @@ export const logout = async () => {
 
 export const getCurrentUser = async () => {
   try {
-    const response = await axios.get(`${API_URL}/me`);
+    const response = await authAxios.get(`${API_URL}/me`);
     return response.data;
   } catch (error) {
     throw error.response?.data || { success: false, message: 'Network error' };
@@ -69,7 +94,7 @@ export const getCurrentUser = async () => {
 
 export const forgotPassword = async (email) => {
   try {
-    const response = await axios.post(`${API_URL}/forgot-password`, { email });
+    const response = await authAxios.post(`${API_URL}/forgot-password`, { email });
     return response.data;
   } catch (error) {
     throw error.response?.data || { success: false, message: 'Network error' };
@@ -78,7 +103,7 @@ export const forgotPassword = async (email) => {
 
 export const resetPassword = async (token, newPassword) => {
   try {
-    const response = await axios.post(`${API_URL}/reset-password`, { 
+    const response = await authAxios.post(`${API_URL}/reset-password`, { 
       token, 
       password: newPassword 
     });

@@ -1,4 +1,6 @@
-import React, { createContext, useContext, useReducer, useEffect } from 'react';
+import React, { createContext, useContext, useReducer, useEffect, useState } from 'react';
+import cartService from '../services/cartService';
+import orderService from '../services/orderService';
 
 // Initial state for cart
 const initialState = {
@@ -12,7 +14,8 @@ const initialState = {
     amount: 0,
     percentage: 0
   },
-  orderHistory: []
+  loading: false,
+  error: null
 };
 
 // Actions
@@ -22,68 +25,64 @@ const UPDATE_QUANTITY = 'UPDATE_QUANTITY';
 const CLEAR_CART = 'CLEAR_CART';
 const SET_TIP = 'SET_TIP';
 const SET_DELIVERY_FEE = 'SET_DELIVERY_FEE';
-const ADD_TO_ORDER_HISTORY = 'ADD_TO_ORDER_HISTORY';
+const SET_LOADING = 'SET_LOADING';
+const SET_ERROR = 'SET_ERROR';
+const SET_CART = 'SET_CART';
+const FETCH_ORDERS_SUCCESS = 'FETCH_ORDERS_SUCCESS';
+const CREATE_ORDER_SUCCESS = 'CREATE_ORDER_SUCCESS';
 const UPDATE_ORDER_PAYMENT = 'UPDATE_ORDER_PAYMENT';
-const REMOVE_ORDER_FROM_HISTORY = 'REMOVE_ORDER_FROM_HISTORY';
+const REMOVE_ORDER = 'REMOVE_ORDER';
 
 // Reducer function
 const cartReducer = (state, action) => {
   switch (action.type) {
-    case ADD_TO_CART: {
-      const existingItemIndex = state.items.findIndex(
-        item => item._id === action.payload._id
-      );
-
-      if (existingItemIndex >= 0) {
-        // Item exists, update quantity
-        const updatedItems = [...state.items];
-        updatedItems[existingItemIndex] = {
-          ...updatedItems[existingItemIndex],
-          quantity: updatedItems[existingItemIndex].quantity + action.payload.quantity
-        };
-
-        return {
-          ...state,
-          items: updatedItems,
-          total: calculateTotal(updatedItems)
-        };
-      } else {
-        // New item, add to cart
-        const newItems = [...state.items, action.payload];
-        return {
-          ...state,
-          items: newItems,
-          total: calculateTotal(newItems)
-        };
-      }
-    }
-
-    case REMOVE_FROM_CART: {
-      const updatedItems = state.items.filter(item => item._id !== action.payload);
+    case SET_LOADING:
       return {
         ...state,
-        items: updatedItems,
-        total: calculateTotal(updatedItems)
+        loading: action.payload
       };
-    }
-
-    case UPDATE_QUANTITY: {
-      const { itemId, quantity } = action.payload;
-      const updatedItems = state.items.map(item => 
-        item._id === itemId ? { ...item, quantity } : item
-      );
       
+    case SET_ERROR:
       return {
         ...state,
-        items: updatedItems,
-        total: calculateTotal(updatedItems)
+        error: action.payload,
+        loading: false
       };
-    }
+      
+    case SET_CART:
+      return {
+        ...state,
+        items: action.payload.items || [],
+        total: action.payload.total || 0,
+        delivery: action.payload.delivery || {
+          fee: 0,
+          free: false
+        },
+        tip: action.payload.tip || {
+          amount: 0,
+          percentage: 0
+        },
+        loading: false
+      };
+
+    case ADD_TO_CART:
+      // This is now handled by the API
+      return state;
+
+    case REMOVE_FROM_CART:
+      // This is now handled by the API
+      return state;
+
+    case UPDATE_QUANTITY:
+      // This is now handled by the API
+      return state;
 
     case CLEAR_CART:
+      // This is now handled by the API
       return {
-        ...initialState,
-        orderHistory: state.orderHistory || [] // Preserve order history when clearing cart
+        ...state,
+        items: [],
+        total: 0
       };
 
     case SET_TIP:
@@ -97,18 +96,26 @@ const cartReducer = (state, action) => {
         ...state,
         delivery: action.payload
       };
-
-    case ADD_TO_ORDER_HISTORY:
+      
+    case FETCH_ORDERS_SUCCESS:
       return {
         ...state,
-        orderHistory: [...(state.orderHistory || []), action.payload]
+        orderHistory: action.payload,
+        loading: false
       };
-
+      
+    case CREATE_ORDER_SUCCESS:
+      return {
+        ...state,
+        orderHistory: [...(state.orderHistory || []), action.payload],
+        loading: false
+      };
+      
     case UPDATE_ORDER_PAYMENT:
       return {
         ...state,
         orderHistory: (state.orderHistory || []).map(order => 
-          order.id === action.payload.orderId
+          order._id === action.payload.orderId
             ? { 
                 ...order, 
                 paymentStatus: 'paid',
@@ -116,13 +123,15 @@ const cartReducer = (state, action) => {
                 paymentDate: action.payload.paymentDate 
               }
             : order
-        )
+        ),
+        loading: false
       };
-
-    case REMOVE_ORDER_FROM_HISTORY:
+      
+    case REMOVE_ORDER:
       return {
         ...state,
-        orderHistory: (state.orderHistory || []).filter(order => order.id !== action.payload)
+        orderHistory: (state.orderHistory || []).filter(order => order._id !== action.payload),
+        loading: false
       };
 
     default:
@@ -130,111 +139,211 @@ const cartReducer = (state, action) => {
   }
 };
 
-// Helper function to calculate total
-const calculateTotal = (items) => {
-  if (!items || !items.length) return 0;
-  return items.reduce((total, item) => {
-    const price = item.price || 0;
-    const quantity = item.quantity || 0;
-    return total + (price * quantity);
-  }, 0);
-};
-
 // Create context
 const CartContext = createContext();
 
 // Provider component
 export const CartProvider = ({ children }) => {
-  // Load cart from localStorage on initial render
-  const loadInitialState = () => {
+  const [state, dispatch] = useReducer(cartReducer, initialState);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  
+  // Check if user is authenticated
+  useEffect(() => {
+    const token = localStorage.getItem('accessToken');
+    setIsAuthenticated(!!token);
+  }, []);
+  
+  // Load cart data when authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchCart();
+      fetchOrders();
+    }
+  }, [isAuthenticated]);
+  
+  // Fetch cart from API
+  const fetchCart = async () => {
+    if (!isAuthenticated) return;
+    
+    dispatch({ type: SET_LOADING, payload: true });
+    
     try {
-      const savedCart = localStorage.getItem('cart');
-      if (savedCart) {
-        const parsedCart = JSON.parse(savedCart);
-        // Ensure required properties always exist
-        return {
-          ...initialState,  // First apply initialState to ensure all properties exist
-          ...parsedCart,    // Then override with saved values
-          total: parsedCart.total || 0,
-          items: parsedCart.items || [],
-          orderHistory: parsedCart.orderHistory || []  // Ensure orderHistory always exists
-        };
-      }
-      return initialState;
+      const response = await cartService.getUserCart();
+      dispatch({ type: SET_CART, payload: response.data });
     } catch (error) {
-      console.error('Error loading cart from localStorage:', error);
-      return initialState;
+      dispatch({ type: SET_ERROR, payload: error.message });
+      console.error('Error fetching cart:', error);
     }
   };
-
-  const [state, dispatch] = useReducer(cartReducer, null, loadInitialState);
-
-  // Save cart to localStorage whenever it changes
-  useEffect(() => {
+  
+  // Fetch orders from API
+  const fetchOrders = async () => {
+    if (!isAuthenticated) return;
+    
+    dispatch({ type: SET_LOADING, payload: true });
+    
     try {
-      localStorage.setItem('cart', JSON.stringify(state));
+      const response = await orderService.getUserOrders();
+      dispatch({ type: FETCH_ORDERS_SUCCESS, payload: response.data });
     } catch (error) {
-      console.error('Error saving cart to localStorage:', error);
+      dispatch({ type: SET_ERROR, payload: error.message });
+      console.error('Error fetching orders:', error);
     }
-  }, [state]);
+  };
 
   // Action creators
-  const addToCart = (item) => {
-    dispatch({ type: ADD_TO_CART, payload: item });
+  const addToCart = async (item) => {
+    if (!isAuthenticated) return;
+    
+    dispatch({ type: SET_LOADING, payload: true });
+    
+    try {
+      await cartService.addItemToCart(item);
+      // Refresh cart after update
+      fetchCart();
+    } catch (error) {
+      dispatch({ type: SET_ERROR, payload: error.message });
+      console.error('Error adding item to cart:', error);
+    }
   };
 
-  const removeFromCart = (itemId) => {
-    dispatch({ type: REMOVE_FROM_CART, payload: itemId });
+  const removeFromCart = async (itemId) => {
+    if (!isAuthenticated) return;
+    
+    dispatch({ type: SET_LOADING, payload: true });
+    
+    try {
+      await cartService.removeCartItem(itemId);
+      // Refresh cart after update
+      fetchCart();
+    } catch (error) {
+      dispatch({ type: SET_ERROR, payload: error.message });
+      console.error('Error removing item from cart:', error);
+    }
   };
 
-  const updateQuantity = (itemId, quantity) => {
-    dispatch({ type: UPDATE_QUANTITY, payload: { itemId, quantity } });
+  const updateQuantity = async (itemId, quantity) => {
+    if (!isAuthenticated) return;
+    
+    dispatch({ type: SET_LOADING, payload: true });
+    
+    try {
+      await cartService.updateItemQuantity(itemId, quantity);
+      // Refresh cart after update
+      fetchCart();
+    } catch (error) {
+      dispatch({ type: SET_ERROR, payload: error.message });
+      console.error('Error updating item quantity:', error);
+    }
   };
 
-  const clearCart = () => {
-    dispatch({ type: CLEAR_CART });
+  const clearCart = async () => {
+    if (!isAuthenticated) return;
+    
+    dispatch({ type: SET_LOADING, payload: true });
+    
+    try {
+      await cartService.clearCart();
+      dispatch({ type: CLEAR_CART });
+    } catch (error) {
+      dispatch({ type: SET_ERROR, payload: error.message });
+      console.error('Error clearing cart:', error);
+    }
   };
 
-  const setTip = (tipData) => {
-    dispatch({ type: SET_TIP, payload: tipData });
+  const setTip = async (tipData) => {
+    if (!isAuthenticated) return;
+    
+    dispatch({ type: SET_LOADING, payload: true });
+    
+    try {
+      await cartService.updateCartDetails({ tip: tipData });
+      dispatch({ type: SET_TIP, payload: tipData });
+      // Refresh cart to get updated total
+      fetchCart();
+    } catch (error) {
+      dispatch({ type: SET_ERROR, payload: error.message });
+      console.error('Error setting tip:', error);
+    }
   };
 
-  const setDeliveryFee = (deliveryData) => {
-    dispatch({ type: SET_DELIVERY_FEE, payload: deliveryData });
+  const setDeliveryFee = async (deliveryData) => {
+    if (!isAuthenticated) return;
+    
+    dispatch({ type: SET_LOADING, payload: true });
+    
+    try {
+      await cartService.updateCartDetails({ delivery: deliveryData });
+      dispatch({ type: SET_DELIVERY_FEE, payload: deliveryData });
+      // Refresh cart to get updated total
+      fetchCart();
+    } catch (error) {
+      dispatch({ type: SET_ERROR, payload: error.message });
+      console.error('Error setting delivery fee:', error);
+    }
   };
 
   // Action for adding to order history
-  const addToOrderHistory = (orderDetails) => {
-    dispatch({ 
-      type: ADD_TO_ORDER_HISTORY, 
-      payload: {
-        ...orderDetails,
-        id: Date.now().toString(), // Generate a unique ID
-        date: new Date().toISOString(),
-        status: 'Placed',
-        paymentStatus: orderDetails.paymentMethod === 'cash' ? 'pending' : 'unpaid'
-      } 
-    });
+  const addToOrderHistory = async (orderDetails) => {
+    if (!isAuthenticated) return;
+    
+    dispatch({ type: SET_LOADING, payload: true });
+    
+    try {
+      const response = await orderService.createOrder(orderDetails);
+      dispatch({ 
+        type: CREATE_ORDER_SUCCESS, 
+        payload: response.data
+      });
+      return response.data;
+    } catch (error) {
+      dispatch({ type: SET_ERROR, payload: error.message });
+      console.error('Error creating order:', error);
+      throw error;
+    }
   };
   
   // Action for updating order payment
-  const updateOrderPayment = (orderId, paymentDetails) => {
-    dispatch({
-      type: UPDATE_ORDER_PAYMENT,
-      payload: {
-        orderId,
-        paymentId: paymentDetails.paymentId,
-        paymentDate: new Date().toISOString()
-      }
-    });
+  const updateOrderPayment = async (orderId, paymentDetails) => {
+    if (!isAuthenticated) return;
+    
+    dispatch({ type: SET_LOADING, payload: true });
+    
+    try {
+      const response = await orderService.updateOrderPayment(orderId, paymentDetails);
+      dispatch({
+        type: UPDATE_ORDER_PAYMENT,
+        payload: {
+          orderId,
+          paymentId: paymentDetails.paymentId,
+          paymentDate: new Date().toISOString()
+        }
+      });
+      return response.data;
+    } catch (error) {
+      dispatch({ type: SET_ERROR, payload: error.message });
+      console.error('Error updating order payment:', error);
+      throw error;
+    }
   };
   
   // Action for removing an order from history
-  const removeOrderFromHistory = (orderId) => {
-    dispatch({
-      type: REMOVE_ORDER_FROM_HISTORY,
-      payload: orderId
-    });
+  const removeOrderFromHistory = async (orderId) => {
+    if (!isAuthenticated) return;
+    
+    dispatch({ type: SET_LOADING, payload: true });
+    
+    try {
+      await orderService.deleteOrder(orderId);
+      dispatch({
+        type: REMOVE_ORDER,
+        payload: orderId
+      });
+    } catch (error) {
+      dispatch({ type: SET_ERROR, payload: error.message });
+      console.error('Error removing order:', error);
+      throw error;
+    }
   };
 
   return (
@@ -249,7 +358,9 @@ export const CartProvider = ({ children }) => {
         setDeliveryFee,
         addToOrderHistory,
         updateOrderPayment,
-        removeOrderFromHistory
+        removeOrderFromHistory,
+        fetchCart,
+        fetchOrders
       }}
     >
       {children}

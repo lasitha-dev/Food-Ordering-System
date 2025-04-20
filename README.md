@@ -69,3 +69,149 @@ Ensure you have the following installed:
 ```bash
 git clone https://github.com/yourusername/food-delivery-platform.git
 cd food-delivery-platform
+
+```
+
+## Project Structure
+
+```
+├── frontend/                 # React frontend application
+├── backend/                  # Backend services
+│   ├── auth-service/         # Authentication and user management
+│   ├── order-service/        # Order and cart management
+│   └── restaurant-service/   # Food items and restaurant management
+├── docker-compose.yml        # Docker Compose configuration
+└── kubernetes/               # Kubernetes deployment files
+```
+
+## Database Configuration
+
+This application uses MongoDB Atlas as its database. The connection details are configured in:
+- `docker-compose.yml` for Docker deployment
+- `kubernetes/secrets.yaml` for Kubernetes deployment (base64 encoded)
+
+## Local Development
+
+### Prerequisites
+
+- Node.js (v16+)
+- npm or yarn
+- MongoDB Atlas account (or change the connection strings to use a local MongoDB)
+
+### Installation
+
+Install all dependencies:
+
+```bash
+npm run install:all
+```
+
+### Running the Application Locally
+
+Start all services:
+
+```bash
+npm start
+```
+
+Or start services individually:
+
+```bash
+# Frontend
+npm run start:frontend
+
+# Auth Service
+npm run start:auth-service
+
+# Order Service
+npm run start:order-service
+
+# Restaurant Service
+npm run start:restaurant-service
+```
+
+## Docker Deployment
+
+### Prerequisites
+
+- Docker and Docker Compose
+
+### Running with Docker
+
+Build and start the application:
+
+```bash
+# Build Docker images
+npm run docker:build
+
+# Start all services
+npm run docker:up
+```
+
+Stop the application:
+
+```bash
+npm run docker:down
+```
+
+## Kubernetes Deployment
+
+### Prerequisites
+
+- Docker
+- Kubernetes cluster (Minikube, Docker Desktop, or a cloud provider)
+- kubectl
+
+### Deployment
+
+Build Docker images and deploy to Kubernetes:
+
+```bash
+# Build all Docker images
+npm run k8s:build-images
+
+# Deploy to Kubernetes
+npm run k8s:deploy
+```
+
+### Manual Deployment
+
+Apply Kubernetes manifests:
+
+```bash
+npm run k8s:apply
+```
+
+### Check Status
+
+```bash
+npm run k8s:status
+```
+
+### Cleanup
+
+```bash
+npm run k8s:delete
+```
+
+For more detailed instructions on Kubernetes deployment, see [kubernetes/README.md](kubernetes/README.md).
+
+## Accessing the Application
+
+- Local development: [http://localhost:3000](http://localhost:3000)
+- Docker: [http://localhost:3000](http://localhost:3000)
+- Kubernetes: [http://food-ordering.local](http://food-ordering.local) (after configuring your hosts file)
+
+## API Endpoints
+
+### Auth Service (Port 3001)
+- `/api/auth/register` - Register a new user
+- `/api/auth/login` - Login user
+
+### Order Service (Port 3003)
+- `/api/cart` - Cart operations
+- `/api/orders` - Order management
+- `/api/addresses` - User address management
+
+### Restaurant Service (Port 3002)
+- `/api/food-items` - Food menu items

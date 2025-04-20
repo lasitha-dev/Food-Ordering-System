@@ -1,0 +1,59 @@
+version: '3'
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.simple
+    ports:
+      - "3000:3000"
+    depends_on:
+      - order-service
+      - auth-service
+      - restaurant-service
+    environment:
+      - REACT_APP_API_URL=http://localhost:3003
+      - REACT_APP_AUTH_URL=http://localhost:3001
+      - REACT_APP_RESTAURANT_URL=http://localhost:3002
+    networks:
+      - app-network
+
+  order-service:
+    build: ./backend/order-service
+    ports:
+      - "3003:3003"
+    environment:
+      - MONGO_URI=mongodb+srv://dbLasitha:dbUser123@cluster0.d3qam.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0
+      - JWT_SECRET=your-secret-key
+      - NODE_ENV=development
+    networks:
+      - app-network
+
+  auth-service:
+    build: ./backend/auth-service
+    ports:
+      - "3001:3001"
+    environment:
+      - MONGO_URI=mongodb+srv://dbLasitha:dbUser123@cluster0.d3qam.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0
+      - JWT_SECRET=your-secret-key
+      - NODE_ENV=development
+    networks:
+      - app-network
+
+  restaurant-service:
+    build: ./backend/restaurant-service
+    ports:
+      - "3002:3002"
+    environment:
+      - MONGO_URI=mongodb+srv://dbLasitha:dbUser123@cluster0.d3qam.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0
+      - JWT_SECRET=your-secret-key
+      - NODE_ENV=development
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  mongodb_data: 
