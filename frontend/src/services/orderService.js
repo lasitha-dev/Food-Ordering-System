@@ -49,10 +49,17 @@ const orderService = {
   // Delete an order
   deleteOrder: async (orderId) => {
     try {
+      console.log('Order service: Attempting to delete order with ID:', orderId);
       const response = await api.delete(`/orders/${orderId}`);
+      console.log('Order service: Delete order response:', response.data);
       return response.data;
     } catch (error) {
-      console.error('Error deleting order:', error);
+      console.error('Order service: Error deleting order:', error);
+      console.error('Order service: Error details:', {
+        status: error.response?.status,
+        message: error.message,
+        responseData: error.response?.data
+      });
       throw error;
     }
   }

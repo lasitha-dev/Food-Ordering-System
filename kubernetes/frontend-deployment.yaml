@@ -20,11 +20,11 @@ spec:
         ports:
         - containerPort: 3000
         env:
-        - name: REACT_APP_API_URL
+        - name: REACT_APP_ORDER_SERVICE_URL
           value: "http://order-service:3003/api"
-        - name: REACT_APP_AUTH_URL
+        - name: REACT_APP_AUTH_SERVICE_URL
           value: "http://auth-service:3001/api"
-        - name: REACT_APP_RESTAURANT_URL
+        - name: REACT_APP_RESTAURANT_SERVICE_URL
           value: "http://restaurant-service:3002/api"
         resources:
           limits:

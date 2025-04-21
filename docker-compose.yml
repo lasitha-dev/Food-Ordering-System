@@ -12,9 +12,9 @@ services:
       - auth-service
       - restaurant-service
     environment:
-      - REACT_APP_API_URL=http://localhost:3003
-      - REACT_APP_AUTH_URL=http://localhost:3001
-      - REACT_APP_RESTAURANT_URL=http://localhost:3002
+      - REACT_APP_ORDER_SERVICE_URL=http://localhost:3003
+      - REACT_APP_AUTH_SERVICE_URL=http://localhost:3001
+      - REACT_APP_RESTAURANT_SERVICE_URL=http://localhost:3002
     networks:
       - app-network
 
@@ -24,8 +24,9 @@ services:
       - "3003:3003"
     environment:
       - MONGO_URI=mongodb+srv://dbLasitha:dbUser123@cluster0.d3qam.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0
-      - JWT_SECRET=your-secret-key
+      - JWT_SECRET=f00d0rd3r1ngSyst3mS3cr3tK3y2025
       - NODE_ENV=development
+      - AUTH_SERVICE_URL=http://auth-service:3001
     networks:
       - app-network
 
@@ -35,7 +36,7 @@ services:
       - "3001:3001"
     environment:
       - MONGO_URI=mongodb+srv://dbLasitha:dbUser123@cluster0.d3qam.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0
-      - JWT_SECRET=your-secret-key
+      - JWT_SECRET=f00d0rd3r1ngSyst3mS3cr3tK3y2025
       - NODE_ENV=development
     networks:
       - app-network
@@ -46,8 +47,9 @@ services:
       - "3002:3002"
     environment:
       - MONGO_URI=mongodb+srv://dbLasitha:dbUser123@cluster0.d3qam.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0
-      - JWT_SECRET=your-secret-key
+      - JWT_SECRET=f00d0rd3r1ngSyst3mS3cr3tK3y2025
       - NODE_ENV=development
+      - AUTH_SERVICE_URL=http://auth-service:3001
     networks:
       - app-network
 

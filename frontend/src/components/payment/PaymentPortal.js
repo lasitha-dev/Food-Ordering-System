@@ -42,10 +42,9 @@ const PaymentPortal = ({ open, onClose, order, onPaymentSuccess }) => {
       onPaymentSuccess(validPaymentResult);
     }
     
-    // Close the dialog after a delay
+    // Close the dialog after a delay without navigating
     setTimeout(() => {
       onClose();
-      navigate('/customer/checkout'); // Navigate back to checkout to see completed orders
     }, 3000);
   };
   

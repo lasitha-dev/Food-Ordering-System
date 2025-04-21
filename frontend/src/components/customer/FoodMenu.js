@@ -23,7 +23,9 @@ import {
   IconButton,
   Paper,
   Skeleton,
-  Fab
+  Fab,
+  Snackbar,
+  Alert
 } from '@mui/material';
 import { Add, Remove, Search as SearchIcon, ShoppingCart as ShoppingCartIcon } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
@@ -101,6 +103,12 @@ const FoodMenu = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [quantities, setQuantities] = useState({});
   const [categories, setCategories] = useState([]);
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: '',
+    severity: 'success'
+  });
+  const [cartButtonLoading, setCartButtonLoading] = useState({});
   
   const { addToCart } = useCart();
   const navigate = useNavigate();
@@ -130,6 +138,8 @@ const FoodMenu = () => {
         // Extract unique categories
         const uniqueCategories = [...new Set(response.data.map(item => item.category))];
         setCategories(uniqueCategories);
+        
+        console.log(`Loaded ${response.data.length} food items with ${uniqueCategories.length} categories`);
       }
     } catch (err) {
       console.error('Error fetching food items:', err);
@@ -143,7 +153,7 @@ const FoodMenu = () => {
   const filteredItems = foodItems.filter(item => {
     const matchesCategory = category === 'all' || item.category === category;
     const matchesSearch = item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         item.description.toLowerCase().includes(searchTerm.toLowerCase());
+                         (item.description && item.description.toLowerCase().includes(searchTerm.toLowerCase()));
     return matchesCategory && matchesSearch;
   });
 
@@ -157,21 +167,66 @@ const FoodMenu = () => {
     });
   };
 
+  // Close snackbar
+  const handleCloseSnackbar = () => {
+    setSnackbar({ ...snackbar, open: false });
+  };
+
   // Handle add to cart
-  const handleAddToCart = (item) => {
-    const quantity = quantities[item._id] || 1;
-    const itemWithQuantity = {
-      ...item,
-      quantity
-    };
-    
-    addToCart(itemWithQuantity);
-    
-    // Reset quantity after adding to cart
-    setQuantities({
-      ...quantities,
-      [item._id]: 1
-    });
+  const handleAddToCart = async (item) => {
+    try {
+      // Set loading state for this specific button
+      setCartButtonLoading(prev => ({ ...prev, [item._id]: true }));
+      
+      const quantity = quantities[item._id] || 1;
+      
+      // Create item object with fields required by the backend API
+      const itemToAdd = {
+        _id: item._id,
+        title: item.title,
+        price: Number(item.price), // Ensure price is a number
+        quantity: Number(quantity), // Ensure quantity is a number
+        image: item.imageUrl || '',
+        categoryId: item.category || ''
+      };
+      
+      console.log('Adding to cart, formatted item:', itemToAdd);
+      
+      // Check login status before proceeding
+      const token = localStorage.getItem('token') || localStorage.getItem('accessToken');
+      if (!token) {
+        throw new Error('Not logged in. Please log in to add items to your cart.');
+      }
+      
+      // Add to cart using API
+      await addToCart(itemToAdd);
+      
+      // Show success message
+      setSnackbar({
+        open: true,
+        message: `${item.title} added to cart!`,
+        severity: 'success'
+      });
+      
+      // Reset quantity after adding to cart
+      setQuantities({
+        ...quantities,
+        [item._id]: 1
+      });
+    } catch (error) {
+      console.error('Failed to add to cart:', error);
+      
+      // Show appropriate error message
+      const errorMsg = error.response?.data?.message || error.message || 'Failed to add to cart';
+      setSnackbar({
+        open: true,
+        message: `Error: ${errorMsg}`,
+        severity: 'error'
+      });
+    } finally {
+      // Clear loading state
+      setCartButtonLoading(prev => ({ ...prev, [item._id]: false }));
+    }
   };
 
   // Add function to handle checkout navigation
@@ -264,126 +319,132 @@ const FoodMenu = () => {
           </Grid>
         </Grid>
         
-        {/* Category tabs for quick filtering */}
-        <Tabs
-          value={category}
-          onChange={(e, newValue) => setCategory(newValue)}
-          variant="scrollable"
-          scrollButtons="auto"
-          sx={{ mb: 3 }}
-        >
-          <Tab label="All Categories" value="all" />
-          {categories.map((cat) => (
-            <Tab key={cat} label={cat} value={cat} />
-          ))}
-        </Tabs>
+        {/* Checkout button */}
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={handleGoToCheckout}
+            startIcon={<ShoppingCartIcon />}
+          >
+            Go to Checkout
+          </Button>
+        </Box>
       </Box>
       
       {/* Food items grid */}
-      <Grid container spacing={4}>
+      <Grid container spacing={3}>
         {filteredItems.length > 0 ? (
           filteredItems.map((item) => (
-            <Grid item xs={12} sm={6} md={6} lg={4} key={item._id}>
+            <Grid item xs={12} sm={6} md={4} key={item._id}>
               <MenuCard>
                 <MenuImage
-                  image={item.imageUrl || 'https://via.placeholder.com/300x200?text=Food+Item'}
+                  image={item.imageUrl || 'https://via.placeholder.com/300x200?text=Food+Image'}
                   title={item.title}
                 >
-                  <CategoryBadge 
-                    label={item.category} 
-                    color="secondary" 
-                    size="small" 
+                  <CategoryBadge
+                    label={item.category}
+                    color="primary"
                   />
                 </MenuImage>
-                <CardContent sx={{ flexGrow: 1, p: 3 }}>
+                <CardContent>
                   <MenuItemTitle variant="h6">
                     {item.title}
                   </MenuItemTitle>
-                  <Typography variant="body2" color="text.secondary" paragraph sx={{ mb: 2 }}>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                     {item.description}
                   </Typography>
-                  <Box sx={{ 
-                    display: 'flex', 
-                    justifyContent: 'space-between', 
-                    alignItems: 'center', 
-                    mt: 3,
-                    flexWrap: 'wrap',
-                    gap: 1
-                  }}>
-                    <MenuItemPrice>
-                      ${(item.price || 21.00).toFixed(2)}
-                    </MenuItemPrice>
-                    
-                    <QuantityControl>
-                      <QuantityButton 
-                        size="small" 
-                        onClick={() => handleQuantityChange(item._id, (quantities[item._id] || 1) - 1)}
-                      >
-                        <Remove fontSize="small" />
-                      </QuantityButton>
-                      
-                      <QuantityInput
-                        size="small"
-                        value={quantities[item._id] || 1}
-                        onChange={(e) => {
-                          const value = parseInt(e.target.value) || 1;
+                  <MenuItemPrice>${item.price.toFixed(2)}</MenuItemPrice>
+                  
+                  <QuantityControl>
+                    <QuantityButton
+                      onClick={() => handleQuantityChange(item._id, quantities[item._id] - 1)}
+                      disabled={quantities[item._id] <= 1}
+                    >
+                      <Remove fontSize="small" />
+                    </QuantityButton>
+                    <QuantityInput
+                      size="small"
+                      value={quantities[item._id] || 1}
+                      onChange={(e) => {
+                        const value = parseInt(e.target.value);
+                        if (!isNaN(value)) {
                           handleQuantityChange(item._id, value);
-                        }}
-                        inputProps={{ 
-                          min: 1, 
-                          max: 99,
-                          style: { padding: '4px 0px' }
-                        }}
-                      />
-                      
-                      <QuantityButton 
-                        size="small" 
-                        onClick={() => handleQuantityChange(item._id, (quantities[item._id] || 1) + 1)}
-                      >
-                        <Add fontSize="small" />
-                      </QuantityButton>
-                    </QuantityControl>
-                  </Box>
+                        }
+                      }}
+                      inputProps={{ min: 1, max: 99 }}
+                    />
+                    <QuantityButton
+                      onClick={() => handleQuantityChange(item._id, quantities[item._id] + 1)}
+                    >
+                      <Add fontSize="small" />
+                    </QuantityButton>
+                  </QuantityControl>
                 </CardContent>
-                <Divider />
-                <CardActions sx={{ p: 2.5 }}>
-                  <Button 
-                    fullWidth 
-                    variant="contained" 
-                    color="primary"
-                    size="large"
+                <CardActions sx={{ px: 2, pb: 2 }}>
+                  <Button
+                    variant="contained"
+                    fullWidth
                     onClick={() => handleAddToCart(item)}
+                    startIcon={<ShoppingCartIcon />}
+                    disabled={cartButtonLoading[item._id]}
                   >
-                    Add to Cart
+                    {cartButtonLoading[item._id] ? <CircularProgress size={24} /> : "Add to Cart"}
                   </Button>
                 </CardActions>
               </MenuCard>
             </Grid>
           ))
         ) : (
-          <Box sx={{ width: '100%', textAlign: 'center', py: 4 }}>
-            <Typography variant="h6" color="text.secondary">
-              No menu items found. Try a different search or category.
-            </Typography>
-          </Box>
+          <Grid item xs={12}>
+            <Paper sx={{ p: 3, textAlign: 'center' }}>
+              <Typography variant="h6" gutterBottom>
+                No items found
+              </Typography>
+              <Typography variant="body1" color="text.secondary">
+                Try adjusting your search or filter criteria.
+              </Typography>
+              {category !== 'all' && (
+                <Button
+                  variant="outlined"
+                  sx={{ mt: 2 }}
+                  onClick={() => setCategory('all')}
+                >
+                  Show All Categories
+                </Button>
+              )}
+            </Paper>
+          </Grid>
         )}
       </Grid>
       
-      {/* Fixed Checkout Button */}
-      <Fab
-        color="secondary"
-        variant="extended"
-        sx={{
-          position: 'fixed',
-          bottom: 24,
-          right: 24,
-          zIndex: 1000
-        }}
-        onClick={handleGoToCheckout}
+      {/* Floating checkout button for mobile */}
+      <Box sx={{ position: 'fixed', bottom: 16, right: 16, display: { xs: 'block', md: 'none' } }}>
+        <Fab
+          color="primary"
+          aria-label="checkout"
+          onClick={handleGoToCheckout}
+        >
+          <ShoppingCartIcon />
+        </Fab>
+      </Box>
+      
+      {/* Snackbar for notifications */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={3000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
       >
-        <ShoppingCartIcon sx={{ mr: 1 }} />
-        Go to Checkout
-      </Fab>
+        <Alert
+          onClose={handleCloseSnackbar}
+          severity={snackbar.severity}
+          sx={{ width: '100%' }}
+          variant="filled"
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Container>
   );
 };
