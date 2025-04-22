@@ -66,10 +66,17 @@ const RestaurantLayout = () => {
   const menuItems = [
     { text: 'Dashboard', icon: <DashboardIcon />, path: '/restaurant' },
     { text: 'Food Items', icon: <FoodItemIcon />, path: '/restaurant/food-items' },
-    { text: 'Orders', icon: <OrdersIcon />, path: '/restaurant/orders', disabled: true },
+    { text: 'Orders', icon: <OrdersIcon />, path: '/restaurant/orders' },
     { text: 'Reports', icon: <ReportsIcon />, path: '/restaurant/reports', disabled: true },
     { text: 'Settings', icon: <SettingsIcon />, path: '/restaurant/settings' },
   ];
+
+  // Log menu items for debugging
+  console.log('Restaurant menu items:', JSON.stringify(menuItems.map(item => ({ 
+    text: item.text, 
+    path: item.path, 
+    disabled: item.disabled || false 
+  }))));
 
   // Get profile picture or use initials as fallback
   const getProfileDisplay = () => {
@@ -183,20 +190,30 @@ const RestaurantLayout = () => {
         <Toolbar />
         <Box sx={{ overflow: 'auto', mt: 2 }}>
           <List>
-            {menuItems.map((item) => (
-              <ListItem key={item.text} disablePadding>
-                <ListItemButton
-                  onClick={() => !item.disabled && navigate(item.path)}
-                  selected={location.pathname === item.path || (item.path !== '/restaurant' && location.pathname.startsWith(item.path))}
-                  disabled={item.disabled}
-                >
-                  <ListItemIcon>
-                    {item.icon}
-                  </ListItemIcon>
-                  <ListItemText primary={item.text} />
-                </ListItemButton>
-              </ListItem>
-            ))}
+            {menuItems.map((item) => {
+              // Log each menu item rendering for debugging
+              console.log(`Rendering menu item: ${item.text}, disabled: ${Boolean(item.disabled)}`);
+              
+              return (
+                <ListItem key={item.text} disablePadding>
+                  <ListItemButton
+                    onClick={() => !item.disabled && navigate(item.path)}
+                    selected={location.pathname === item.path || (item.path !== '/restaurant' && location.pathname.startsWith(item.path))}
+                    disabled={item.disabled}
+                    sx={{ 
+                      '&.Mui-disabled': {
+                        opacity: 0.6,
+                      }
+                    }}
+                  >
+                    <ListItemIcon>
+                      {item.icon}
+                    </ListItemIcon>
+                    <ListItemText primary={item.text} />
+                  </ListItemButton>
+                </ListItem>
+              );
+            })}
           </List>
           <Divider sx={{ mt: 2 }} />
         </Box>

@@ -230,4 +230,104 @@ exports.deleteOrder = async (req, res) => {
       error: error.message
     });
   }
+};
+
+/**
+ * @desc   Get all orders for restaurant admin (paid or cash on delivery)
+ * @route  GET /api/orders/restaurant
+ * @access Private (restaurant-admin)
+ */
+exports.getRestaurantOrders = async (req, res) => {
+  try {
+    // Check if user is restaurant admin
+    if (req.user.userType !== 'restaurant-admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Only restaurant admins can view these orders.'
+      });
+    }
+    
+    // Find all orders that are either paid by card or are cash on delivery
+    const orders = await Order.find({
+      $or: [
+        { paymentStatus: 'paid' },
+        { paymentMethod: 'cash' }
+      ]
+    }).sort({ createdAt: -1 });
+    
+    res.status(200).json({
+      success: true,
+      count: orders.length,
+      data: orders
+    });
+  } catch (error) {
+    console.error('Error fetching restaurant orders:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * @desc   Update order status
+ * @route  PUT /api/orders/:id/status
+ * @access Private (restaurant-admin)
+ */
+exports.updateOrderStatus = async (req, res) => {
+  try {
+    const { status } = req.body;
+    
+    // Validate status
+    const validStatuses = ['Placed', 'Confirmed', 'Preparing', 'Ready', 'Out for Delivery', 'Delivered', 'Cancelled'];
+    if (!status || !validStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide a valid order status'
+      });
+    }
+    
+    // Check if user is restaurant admin
+    if (req.user.userType !== 'restaurant-admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Only restaurant admins can update order status.'
+      });
+    }
+    
+    // Find order
+    const order = await Order.findById(req.params.id);
+    
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+    }
+    
+    // Update order status
+    order.status = status;
+    
+    // If status is Delivered and payment method is cash, update payment status to paid
+    if (status === 'Delivered' && order.paymentMethod === 'cash') {
+      order.paymentStatus = 'paid';
+      order.paymentDate = Date.now();
+    }
+    
+    // Save order
+    await order.save();
+    
+    res.status(200).json({
+      success: true,
+      data: order
+    });
+  } catch (error) {
+    console.error('Error updating order status:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
 }; 

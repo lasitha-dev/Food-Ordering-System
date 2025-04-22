@@ -43,6 +43,7 @@ import FoodItems from './pages/restaurant/FoodItems';
 import CreateFoodItem from './pages/restaurant/CreateFoodItem';
 import EditFoodItem from './pages/restaurant/EditFoodItem';
 import RestaurantSettings from './pages/restaurant/Settings';
+import RestaurantOrders from './pages/restaurant/Orders';
 
 // Delivery personnel pages
 import DeliveryDashboard from './pages/delivery/Dashboard';
@@ -247,6 +248,7 @@ const ThemedApp = () => {
             <Route path="food-items" element={<FoodItems />} />
             <Route path="food-items/create" element={<CreateFoodItem />} />
             <Route path="food-items/edit/:id" element={<EditFoodItem />} />
+            <Route path="orders" element={<RestaurantOrders />} />
             <Route path="settings" element={<RestaurantSettings />} />
           </Route>
           

@@ -5,7 +5,9 @@ const {
   getOrderById, 
   createOrder, 
   updateOrderPayment, 
-  deleteOrder 
+  deleteOrder,
+  getRestaurantOrders,
+  updateOrderStatus
 } = require('../controllers/orderController');
 const { protect } = require('../middleware/auth');
 
@@ -17,11 +19,18 @@ router.route('/')
   .get(getUserOrders)
   .post(createOrder);
 
+// Restaurant orders route
+router.get('/restaurant', getRestaurantOrders);
+
 router.route('/:id')
   .get(getOrderById)
   .delete(deleteOrder);
 
 router.route('/:id/payment')
   .put(updateOrderPayment);
+
+// Route to update order status
+router.route('/:id/status')
+  .put(updateOrderStatus);
 
 module.exports = router; 

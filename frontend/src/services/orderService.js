@@ -13,6 +13,17 @@ const orderService = {
     }
   },
   
+  // Get all orders for restaurant admin (paid or cash on delivery)
+  getRestaurantOrders: async () => {
+    try {
+      const response = await api.get('/orders/restaurant');
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching restaurant orders:', error);
+      throw error;
+    }
+  },
+  
   // Get a single order by ID
   getOrderById: async (orderId) => {
     try {
@@ -60,6 +71,17 @@ const orderService = {
         message: error.message,
         responseData: error.response?.data
       });
+      throw error;
+    }
+  },
+  
+  // Update order status (for restaurant admin)
+  updateOrderStatus: async (orderId, status) => {
+    try {
+      const response = await api.put(`/orders/${orderId}/status`, { status });
+      return response.data;
+    } catch (error) {
+      console.error('Error updating order status:', error);
       throw error;
     }
   }
