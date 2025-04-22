@@ -7,7 +7,10 @@ const {
   updateOrderPayment, 
   deleteOrder,
   getRestaurantOrders,
-  updateOrderStatus
+  updateOrderStatus,
+  assignOrder,
+  getAssignedOrders,
+  updateDeliveryStatus
 } = require('../controllers/orderController');
 const { protect } = require('../middleware/auth');
 
@@ -22,15 +25,28 @@ router.route('/')
 // Restaurant orders route
 router.get('/restaurant', getRestaurantOrders);
 
+// Delivery personnel assigned orders route
+router.get('/delivery/assigned', getAssignedOrders);
+
+// Order detail routes
 router.route('/:id')
   .get(getOrderById)
   .delete(deleteOrder);
 
+// Order payment route
 router.route('/:id/payment')
   .put(updateOrderPayment);
 
-// Route to update order status
+// Order status update route
 router.route('/:id/status')
   .put(updateOrderStatus);
+
+// Order assignment route
+router.route('/:id/assign')
+  .put(assignOrder);
+
+// Delivery status update route
+router.route('/:id/delivery-status')
+  .put(updateDeliveryStatus);
 
 module.exports = router; 

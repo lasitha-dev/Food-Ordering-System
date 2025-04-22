@@ -330,4 +330,183 @@ exports.updateOrderStatus = async (req, res) => {
       error: error.message
     });
   }
+};
+
+/**
+ * @desc   Assign order to delivery personnel
+ * @route  PUT /api/orders/:id/assign
+ * @access Private (restaurant-admin)
+ */
+exports.assignOrder = async (req, res) => {
+  try {
+    const { deliveryPersonnelId, deliveryPersonnelName } = req.body;
+    
+    // Validate required data
+    if (!deliveryPersonnelId || !deliveryPersonnelName) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide delivery personnel ID and name'
+      });
+    }
+    
+    // Check if user is restaurant admin
+    if (req.user.userType !== 'restaurant-admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Only restaurant admins can assign orders.'
+      });
+    }
+    
+    // Find order
+    const order = await Order.findById(req.params.id);
+    
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+    }
+    
+    // Update order
+    order.assignedTo = deliveryPersonnelId;
+    order.assignedToName = deliveryPersonnelName;
+    order.deliveryStatus = 'Assigned';
+    order.status = 'Out for Delivery';
+    
+    // Save order
+    await order.save();
+    
+    res.status(200).json({
+      success: true,
+      data: order
+    });
+  } catch (error) {
+    console.error('Error assigning order:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * @desc   Get assigned orders for delivery personnel
+ * @route  GET /api/orders/delivery/assigned
+ * @access Private (delivery-personnel)
+ */
+exports.getAssignedOrders = async (req, res) => {
+  try {
+    // Check if user is delivery personnel
+    if (req.user.userType !== 'delivery-personnel') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Only delivery personnel can view assigned orders.'
+      });
+    }
+    
+    // Find orders assigned to this delivery personnel
+    const orders = await Order.find({
+      assignedTo: req.user.id,
+      deliveryStatus: { $in: ['Assigned', 'Accepted', 'Picked Up'] }
+    }).sort({ createdAt: -1 });
+    
+    res.status(200).json({
+      success: true,
+      count: orders.length,
+      data: orders
+    });
+  } catch (error) {
+    console.error('Error fetching assigned orders:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * @desc   Update delivery status
+ * @route  PUT /api/orders/:id/delivery-status
+ * @access Private (delivery-personnel)
+ */
+exports.updateDeliveryStatus = async (req, res) => {
+  try {
+    const { status } = req.body;
+    
+    // Validate status
+    const validStatuses = ['Accepted', 'Picked Up', 'Delivered', 'Rejected'];
+    if (!status || !validStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide a valid delivery status'
+      });
+    }
+    
+    // Check if user is delivery personnel
+    if (req.user.userType !== 'delivery-personnel') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Only delivery personnel can update delivery status.'
+      });
+    }
+    
+    // Find order
+    const order = await Order.findById(req.params.id);
+    
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+    }
+    
+    // Check if this order is assigned to this delivery personnel
+    if (order.assignedTo.toString() !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. You are not assigned to this order.'
+      });
+    }
+    
+    // Update order status
+    order.deliveryStatus = status;
+    
+    // Update timestamps based on status
+    if (status === 'Accepted') {
+      order.deliveryAcceptedAt = Date.now();
+    } else if (status === 'Picked Up') {
+      order.deliveryPickedUpAt = Date.now();
+    } else if (status === 'Delivered') {
+      order.deliveryCompletedAt = Date.now();
+      order.status = 'Delivered';
+      
+      // If payment method is cash, update payment status to paid
+      if (order.paymentMethod === 'cash') {
+        order.paymentStatus = 'paid';
+        order.paymentDate = Date.now();
+      }
+    } else if (status === 'Rejected') {
+      // If delivery personnel rejects the order, unassign them
+      order.assignedTo = null;
+      order.assignedToName = null;
+      order.deliveryStatus = 'Unassigned';
+    }
+    
+    // Save order
+    await order.save();
+    
+    res.status(200).json({
+      success: true,
+      data: order
+    });
+  } catch (error) {
+    console.error('Error updating delivery status:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
 }; 

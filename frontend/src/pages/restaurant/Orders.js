@@ -24,17 +24,39 @@ import {
   InputLabel,
   Tooltip,
   Alert,
-  Snackbar
+  Snackbar,
+  Grid,
+  Card,
+  CardContent,
+  CardActions,
+  FormControlLabel,
+  Switch,
+  TextField,
+  Divider,
+  Tabs,
+  Tab,
+  Avatar,
+  Stack
 } from '@mui/material';
 import {
   Refresh as RefreshIcon,
   Info as InfoIcon,
   LocalShipping as ShippingIcon,
   CheckCircle as CheckCircleIcon,
-  RestaurantMenu as PrepareIcon
+  RestaurantMenu,
+  FilterList as FilterIcon,
+  DeliveryDining as DeliveryIcon,
+  Search as SearchIcon,
+  Payment as PaymentIcon,
+  Money as CashIcon,
+  CreditCard as CardIcon,
+  AccessTime as PendingIcon,
+  Done as DoneIcon,
+  Person as PersonIcon
 } from '@mui/icons-material';
 import { format } from 'date-fns';
 import orderService from '../../services/orderService';
+import userService from '../../services/userService';
 
 const formatCurrency = (value) => {
   return new Intl.NumberFormat('en-US', {
@@ -72,6 +94,27 @@ const getStatusColor = (status) => {
   }
 };
 
+const getStatusIcon = (status) => {
+  switch (status) {
+    case 'Placed':
+      return <PendingIcon />;
+    case 'Confirmed':
+      return <CheckCircleIcon />;
+    case 'Preparing':
+      return <RestaurantMenu />;
+    case 'Ready':
+      return <DoneIcon />;
+    case 'Out for Delivery':
+      return <DeliveryIcon />;
+    case 'Delivered':
+      return <DoneIcon color="success" />;
+    case 'Cancelled':
+      return <InfoIcon color="error" />;
+    default:
+      return <InfoIcon />;
+  }
+};
+
 const getPaymentStatusColor = (status) => {
   switch (status) {
     case 'paid':
@@ -89,25 +132,74 @@ const getPaymentStatusColor = (status) => {
   }
 };
 
+const getPaymentIcon = (method, status) => {
+  if (method === 'card') {
+    return <CardIcon color={status === 'paid' ? 'success' : 'error'} />;
+  } else {
+    return <CashIcon color={status === 'paid' ? 'success' : 'warning'} />;
+  }
+};
+
+const getDeliveryStatusColor = (status) => {
+  switch (status) {
+    case 'Accepted':
+      return 'success';
+    case 'Assigned':
+      return 'primary';
+    case 'Picked Up':
+      return 'info';
+    case 'Delivered':
+      return 'success';
+    case 'Rejected':
+      return 'error';
+    case 'Unassigned':
+    default:
+      return 'warning';
+  }
+};
+
 const RestaurantOrders = () => {
   const [orders, setOrders] = useState([]);
+  const [filteredOrders, setFilteredOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [orderDetailsOpen, setOrderDetailsOpen] = useState(false);
   const [statusUpdateOpen, setStatusUpdateOpen] = useState(false);
+  const [assignDeliveryOpen, setAssignDeliveryOpen] = useState(false);
   const [newStatus, setNewStatus] = useState('');
+  const [activeTab, setActiveTab] = useState(0);
+  const [deliveryPersonnel, setDeliveryPersonnel] = useState([]);
+  const [selectedDeliveryPersonId, setSelectedDeliveryPersonId] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [paymentFilter, setPaymentFilter] = useState({
+    cash: true,
+    card: true
+  });
+  const [statusFilter, setStatusFilter] = useState({
+    Placed: true,
+    Confirmed: true,
+    Preparing: true,
+    Ready: true,
+    OutForDelivery: true,
+    Delivered: true,
+    Cancelled: false
+  });
+  const [showUnassignedOnly, setShowUnassignedOnly] = useState(false);
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: '',
     severity: 'success'
   });
   
+  // Fetch orders from API
   const fetchOrders = async () => {
     setLoading(true);
     try {
       const response = await orderService.getRestaurantOrders();
-      setOrders(response.data || []);
+      const ordersData = response.data || [];
+      setOrders(ordersData);
+      applyFilters(ordersData);
       setError(null);
     } catch (error) {
       console.error('Error fetching restaurant orders:', error);
@@ -117,36 +209,167 @@ const RestaurantOrders = () => {
     }
   };
   
+  // Fetch delivery personnel for assignment
+  const fetchDeliveryPersonnel = async () => {
+    try {
+      console.log('Fetching delivery personnel...');
+      const response = await userService.getDeliveryPersonnel();
+      console.log('Delivery personnel response:', response);
+      
+      // Handle different response structures
+      if (response && response.data) {
+        // Direct data array
+        if (Array.isArray(response.data)) {
+          setDeliveryPersonnel(response.data);
+          console.log(`Found ${response.data.length} delivery personnel`);
+        } 
+        // Nested data with success property
+        else if (response.success && Array.isArray(response.data)) {
+          setDeliveryPersonnel(response.data);
+          console.log(`Found ${response.data.length} delivery personnel`);
+        }
+        // Handle case where data might be in a nested property
+        else if (response.data.deliveryPersonnel && Array.isArray(response.data.deliveryPersonnel)) {
+          setDeliveryPersonnel(response.data.deliveryPersonnel);
+          console.log(`Found ${response.data.deliveryPersonnel.length} delivery personnel`);
+        }
+        else {
+          console.error('Unexpected response format:', response);
+          setDeliveryPersonnel([]);
+        }
+      } else {
+        console.error('Invalid response format:', response);
+        setDeliveryPersonnel([]);
+      }
+    } catch (error) {
+      console.error('Error fetching delivery personnel:', error);
+      setSnackbar({
+        open: true,
+        message: 'Failed to load delivery personnel',
+        severity: 'error'
+      });
+    }
+  };
+  
+  // Initial data fetch
   useEffect(() => {
     fetchOrders();
+    fetchDeliveryPersonnel();
   }, []);
   
+  // Apply filters to orders
+  const applyFilters = (ordersList = orders) => {
+    let result = [...ordersList];
+    
+    // Apply payment method filter
+    if (!paymentFilter.cash || !paymentFilter.card) {
+      if (!paymentFilter.cash) {
+        result = result.filter(order => order.paymentMethod !== 'cash');
+      }
+      if (!paymentFilter.card) {
+        result = result.filter(order => order.paymentMethod !== 'card');
+      }
+    }
+    
+    // Apply status filter
+    const activeStatuses = Object.entries(statusFilter)
+      .filter(([_, value]) => value)
+      .map(([key, _]) => key === 'OutForDelivery' ? 'Out for Delivery' : key);
+    
+    if (activeStatuses.length < Object.keys(statusFilter).length) {
+      result = result.filter(order => activeStatuses.includes(order.status));
+    }
+    
+    // Apply unassigned filter
+    if (showUnassignedOnly) {
+      result = result.filter(order => !order.assignedTo);
+    }
+    
+    // Apply search filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter(order => 
+        order._id.toLowerCase().includes(query) ||
+        order.deliveryAddress.toLowerCase().includes(query) ||
+        (order.assignedToName && order.assignedToName.toLowerCase().includes(query))
+      );
+    }
+    
+    // Set filtered orders
+    setFilteredOrders(result);
+  };
+  
+  // Handle filter changes
+  useEffect(() => {
+    applyFilters();
+  }, [paymentFilter, statusFilter, showUnassignedOnly, searchQuery]);
+  
+  // Tab change handler
+  const handleTabChange = (event, newValue) => {
+    setActiveTab(newValue);
+    
+    // Update filters based on tab
+    if (newValue === 0) { // All Orders
+      setPaymentFilter({ cash: true, card: true });
+      setShowUnassignedOnly(false);
+    } else if (newValue === 1) { // Card Payments
+      setPaymentFilter({ cash: false, card: true });
+      setShowUnassignedOnly(false);
+    } else if (newValue === 2) { // Cash on Delivery
+      setPaymentFilter({ cash: true, card: false });
+      setShowUnassignedOnly(false);
+    } else if (newValue === 3) { // Unassigned
+      setShowUnassignedOnly(true);
+      setPaymentFilter({ cash: true, card: true });
+    }
+  };
+  
+  // Refresh data
   const handleRefresh = () => {
     fetchOrders();
   };
   
+  // View order details
   const handleViewOrderDetails = (order) => {
     setSelectedOrder(order);
     setOrderDetailsOpen(true);
   };
   
+  // Close order details dialog
   const handleCloseOrderDetails = () => {
     setOrderDetailsOpen(false);
     setSelectedOrder(null);
   };
   
+  // Open status update dialog
   const handleOpenStatusUpdate = (order) => {
     setSelectedOrder(order);
     setNewStatus(order.status);
     setStatusUpdateOpen(true);
   };
   
+  // Close status update dialog
   const handleCloseStatusUpdate = () => {
     setStatusUpdateOpen(false);
     setSelectedOrder(null);
     setNewStatus('');
   };
   
+  // Open delivery assignment dialog
+  const handleOpenAssignDelivery = (order) => {
+    setSelectedOrder(order);
+    setSelectedDeliveryPersonId('');
+    setAssignDeliveryOpen(true);
+  };
+  
+  // Close delivery assignment dialog
+  const handleCloseAssignDelivery = () => {
+    setAssignDeliveryOpen(false);
+    setSelectedOrder(null);
+    setSelectedDeliveryPersonId('');
+  };
+  
+  // Update order status
   const handleUpdateStatus = async () => {
     if (!selectedOrder || !newStatus) return;
     
@@ -154,11 +377,14 @@ const RestaurantOrders = () => {
       await orderService.updateOrderStatus(selectedOrder._id, newStatus);
       
       // Update local state
-      setOrders(orders.map(order => 
+      const updatedOrders = orders.map(order => 
         order._id === selectedOrder._id 
           ? { ...order, status: newStatus } 
           : order
-      ));
+      );
+      
+      setOrders(updatedOrders);
+      applyFilters(updatedOrders);
       
       setSnackbar({
         open: true,
@@ -177,10 +403,66 @@ const RestaurantOrders = () => {
     }
   };
   
+  // Assign delivery personnel
+  const handleAssignDelivery = async () => {
+    if (!selectedOrder || !selectedDeliveryPersonId) return;
+    
+    try {
+      // Find the selected delivery person's name
+      const selectedPerson = deliveryPersonnel.find(
+        person => person._id === selectedDeliveryPersonId
+      );
+      
+      if (!selectedPerson) {
+        throw new Error('Selected delivery personnel not found');
+      }
+      
+      // Assign the order
+      await orderService.assignOrderToDelivery(
+        selectedOrder._id,
+        selectedDeliveryPersonId,
+        selectedPerson.name
+      );
+      
+      // Update local state
+      const updatedOrders = orders.map(order => 
+        order._id === selectedOrder._id 
+          ? { 
+              ...order, 
+              assignedTo: selectedDeliveryPersonId,
+              assignedToName: selectedPerson.name,
+              deliveryStatus: 'Assigned',
+              status: 'Out for Delivery'
+            } 
+          : order
+      );
+      
+      setOrders(updatedOrders);
+      applyFilters(updatedOrders);
+      
+      setSnackbar({
+        open: true,
+        message: `Order assigned to ${selectedPerson.name}`,
+        severity: 'success'
+      });
+      
+      handleCloseAssignDelivery();
+    } catch (error) {
+      console.error('Error assigning delivery personnel:', error);
+      setSnackbar({
+        open: true,
+        message: 'Failed to assign delivery personnel',
+        severity: 'error'
+      });
+    }
+  };
+  
+  // Close snackbar
   const handleCloseSnackbar = () => {
     setSnackbar({ ...snackbar, open: false });
   };
   
+  // Loading state
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
@@ -189,6 +471,7 @@ const RestaurantOrders = () => {
     );
   }
   
+  // Error state
   if (error) {
     return (
       <Box sx={{ p: 3 }}>
@@ -204,88 +487,224 @@ const RestaurantOrders = () => {
   
   return (
     <Box sx={{ p: 3 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4" gutterBottom>
-          Restaurant Orders
-        </Typography>
-        <Button 
-          variant="outlined" 
-          startIcon={<RefreshIcon />}
-          onClick={handleRefresh}
-        >
-          Refresh
-        </Button>
-      </Box>
+      {/* Header section */}
+      <Paper sx={{ p: 2, mb: 3 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Typography variant="h4">
+            Restaurant Orders
+          </Typography>
+          <Button 
+            variant="outlined" 
+            startIcon={<RefreshIcon />}
+            onClick={handleRefresh}
+          >
+            Refresh
+          </Button>
+        </Box>
+        
+        {/* Tabs for quick filtering */}
+        <Box sx={{ width: '100%', mb: 2 }}>
+          <Tabs 
+            value={activeTab} 
+            onChange={handleTabChange}
+            indicatorColor="primary"
+            textColor="primary"
+            variant="fullWidth"
+          >
+            <Tab label="All Orders" icon={<InfoIcon />} />
+            <Tab label="Card Payments" icon={<CardIcon />} />
+            <Tab label="Cash on Delivery" icon={<CashIcon />} />
+            <Tab label="Unassigned" icon={<PersonIcon />} />
+          </Tabs>
+        </Box>
+        
+        {/* Search and filter bar */}
+        <Grid container spacing={2} alignItems="center">
+          <Grid item xs={12} md={6}>
+            <TextField
+              fullWidth
+              variant="outlined"
+              placeholder="Search orders..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              InputProps={{
+                startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} />
+              }}
+              size="small"
+            />
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={paymentFilter.card}
+                    onChange={(e) => setPaymentFilter({...paymentFilter, card: e.target.checked})}
+                  />
+                }
+                label="Card"
+              />
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={paymentFilter.cash}
+                    onChange={(e) => setPaymentFilter({...paymentFilter, cash: e.target.checked})}
+                  />
+                }
+                label="Cash"
+              />
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={showUnassignedOnly}
+                    onChange={(e) => setShowUnassignedOnly(e.target.checked)}
+                  />
+                }
+                label="Unassigned Only"
+              />
+            </Box>
+          </Grid>
+        </Grid>
+      </Paper>
       
-      {orders.length === 0 ? (
+      {/* Orders list */}
+      {filteredOrders.length === 0 ? (
         <Paper sx={{ p: 3, textAlign: 'center' }}>
           <Typography variant="body1">
-            No orders found. Orders will appear here once customers place them.
+            No orders found matching your filters.
           </Typography>
         </Paper>
       ) : (
-        <TableContainer component={Paper}>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Order ID</TableCell>
-                <TableCell>Date</TableCell>
-                <TableCell>Total</TableCell>
-                <TableCell>Payment Method</TableCell>
-                <TableCell>Payment Status</TableCell>
-                <TableCell>Order Status</TableCell>
-                <TableCell>Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {orders.map((order) => (
-                <TableRow key={order._id}>
-                  <TableCell>{order._id.substring(0, 8)}...</TableCell>
-                  <TableCell>{formatDate(order.createdAt)}</TableCell>
-                  <TableCell>{formatCurrency(order.total)}</TableCell>
-                  <TableCell>
-                    <Chip 
-                      label={order.paymentMethod === 'card' ? 'Credit Card' : 'Cash on Delivery'} 
-                      color={order.paymentMethod === 'card' ? 'primary' : 'secondary'}
-                      size="small"
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Chip 
-                      label={order.paymentStatus.charAt(0).toUpperCase() + order.paymentStatus.slice(1)} 
-                      color={getPaymentStatusColor(order.paymentStatus)}
-                      size="small"
-                    />
-                  </TableCell>
-                  <TableCell>
+        <Grid container spacing={2}>
+          {filteredOrders.map((order) => (
+            <Grid item xs={12} md={6} lg={4} key={order._id}>
+              <Card elevation={3} sx={{ 
+                height: '100%', 
+                display: 'flex', 
+                flexDirection: 'column',
+                transition: 'transform 0.2s, box-shadow 0.2s',
+                '&:hover': {
+                  transform: 'translateY(-4px)',
+                  boxShadow: 6
+                }
+              }}>
+                <CardContent sx={{ flexGrow: 1 }}>
+                  {/* Order header */}
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
+                    <Typography variant="h6">
+                      #{order._id.substring(0, 8)}...
+                    </Typography>
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      <Tooltip title={`Payment: ${order.paymentMethod.toUpperCase()}`}>
+                        {getPaymentIcon(order.paymentMethod, order.paymentStatus)}
+                      </Tooltip>
+                      <Tooltip title={`Status: ${order.status}`}>
+                        {getStatusIcon(order.status)}
+                      </Tooltip>
+                    </Box>
+                  </Box>
+                  
+                  {/* Order date and amount */}
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
+                    <Typography variant="body2" color="text.secondary">
+                      {formatDate(order.createdAt)}
+                    </Typography>
+                    <Typography variant="body1" fontWeight="bold">
+                      {formatCurrency(order.total)}
+                    </Typography>
+                  </Box>
+                  
+                  {/* Order status chips */}
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
                     <Chip 
                       label={order.status} 
                       color={getStatusColor(order.status)}
                       size="small"
                     />
-                  </TableCell>
-                  <TableCell>
-                    <Box sx={{ display: 'flex' }}>
-                      <Tooltip title="View Details">
-                        <IconButton onClick={() => handleViewOrderDetails(order)} size="small">
-                          <InfoIcon />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Update Status">
-                        <IconButton onClick={() => handleOpenStatusUpdate(order)} size="small">
-                          {order.status === 'Placed' ? <CheckCircleIcon /> :
-                           order.status === 'Confirmed' ? <PrepareIcon /> :
-                           order.status === 'Preparing' || order.status === 'Ready' ? <ShippingIcon /> :
-                           <InfoIcon />}
-                        </IconButton>
-                      </Tooltip>
-                    </Box>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+                    <Chip 
+                      label={order.paymentMethod === 'card' ? 'Credit Card' : 'Cash on Delivery'} 
+                      color={order.paymentMethod === 'card' ? 'primary' : 'secondary'}
+                      size="small"
+                    />
+                    <Chip 
+                      label={order.paymentStatus.charAt(0).toUpperCase() + order.paymentStatus.slice(1)} 
+                      color={getPaymentStatusColor(order.paymentStatus)}
+                      size="small"
+                    />
+                  </Box>
+                  
+                  {/* Delivery assignment info */}
+                  <Box sx={{ mb: 2 }}>
+                    {order.assignedTo ? (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Avatar sx={{ width: 24, height: 24, bgcolor: 'primary.main' }}>
+                          <PersonIcon sx={{ fontSize: 16 }} />
+                        </Avatar>
+                        <Typography variant="body2">
+                          {order.assignedToName}
+                        </Typography>
+                        <Chip 
+                          label={order.deliveryStatus} 
+                          color={getDeliveryStatusColor(order.deliveryStatus)}
+                          size="small"
+                          sx={{ ml: 'auto' }}
+                        />
+                      </Box>
+                    ) : (
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        <Typography variant="body2" color="text.secondary">
+                          No delivery personnel assigned
+                        </Typography>
+                        <Chip 
+                          label="Unassigned" 
+                          color="warning"
+                          size="small"
+                          sx={{ ml: 'auto' }}
+                        />
+                      </Box>
+                    )}
+                  </Box>
+                  
+                  {/* Order items summary */}
+                  <Typography variant="body2" color="text.secondary">
+                    {order.items.length} item{order.items.length !== 1 ? 's' : ''}
+                  </Typography>
+                </CardContent>
+                <Divider />
+                <CardActions sx={{ justifyContent: 'space-between' }}>
+                  <Button 
+                    size="small" 
+                    startIcon={<InfoIcon />}
+                    onClick={() => handleViewOrderDetails(order)}
+                  >
+                    Details
+                  </Button>
+                  <Box>
+                    <Tooltip title="Update Order Status">
+                      <IconButton 
+                        size="small" 
+                        color="primary"
+                        onClick={() => handleOpenStatusUpdate(order)}
+                      >
+                        <CheckCircleIcon />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Assign Delivery">
+                      <IconButton 
+                        size="small" 
+                        color="secondary"
+                        onClick={() => handleOpenAssignDelivery(order)}
+                        disabled={!!order.assignedTo}
+                      >
+                        <DeliveryIcon />
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
+                </CardActions>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
       )}
       
       {/* Order Details Dialog */}
@@ -323,6 +742,49 @@ const RestaurantOrders = () => {
                 {selectedOrder.additionalInstructions && (
                   <Typography variant="body2" gutterBottom>
                     Instructions: {selectedOrder.additionalInstructions}
+                  </Typography>
+                )}
+              </Box>
+              
+              <Typography variant="subtitle1" gutterBottom>
+                Delivery Information
+              </Typography>
+              <Box sx={{ mb: 3 }}>
+                <Typography variant="body2" gutterBottom>
+                  Delivery Status: 
+                  <Chip 
+                    label={selectedOrder.deliveryStatus || 'Unassigned'} 
+                    color={getDeliveryStatusColor(selectedOrder.deliveryStatus || 'Unassigned')}
+                    size="small"
+                    sx={{ ml: 1 }}
+                  />
+                </Typography>
+                
+                {selectedOrder.assignedTo ? (
+                  <Typography variant="body2" gutterBottom>
+                    Assigned To: {selectedOrder.assignedToName}
+                  </Typography>
+                ) : (
+                  <Typography variant="body2" color="text.secondary" gutterBottom>
+                    Not assigned to any delivery personnel
+                  </Typography>
+                )}
+                
+                {selectedOrder.deliveryAcceptedAt && (
+                  <Typography variant="body2" gutterBottom>
+                    Accepted at: {formatDate(selectedOrder.deliveryAcceptedAt)}
+                  </Typography>
+                )}
+                
+                {selectedOrder.deliveryPickedUpAt && (
+                  <Typography variant="body2" gutterBottom>
+                    Picked up at: {formatDate(selectedOrder.deliveryPickedUpAt)}
+                  </Typography>
+                )}
+                
+                {selectedOrder.deliveryCompletedAt && (
+                  <Typography variant="body2" gutterBottom>
+                    Delivered at: {formatDate(selectedOrder.deliveryCompletedAt)}
                   </Typography>
                 )}
               </Box>
@@ -378,18 +840,33 @@ const RestaurantOrders = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseOrderDetails}>Close</Button>
-          <Button 
-            variant="contained" 
-            color="primary" 
-            onClick={() => {
-              handleCloseOrderDetails();
-              if (selectedOrder) {
-                handleOpenStatusUpdate(selectedOrder);
-              }
-            }}
-          >
-            Update Status
-          </Button>
+          <Stack direction="row" spacing={1}>
+            {selectedOrder && !selectedOrder.assignedTo && (
+              <Button 
+                variant="contained" 
+                color="secondary" 
+                startIcon={<DeliveryIcon />}
+                onClick={() => {
+                  handleCloseOrderDetails();
+                  handleOpenAssignDelivery(selectedOrder);
+                }}
+              >
+                Assign Delivery
+              </Button>
+            )}
+            <Button 
+              variant="contained" 
+              color="primary" 
+              onClick={() => {
+                handleCloseOrderDetails();
+                if (selectedOrder) {
+                  handleOpenStatusUpdate(selectedOrder);
+                }
+              }}
+            >
+              Update Status
+            </Button>
+          </Stack>
         </DialogActions>
       </Dialog>
       
@@ -422,6 +899,76 @@ const RestaurantOrders = () => {
           <Button onClick={handleCloseStatusUpdate}>Cancel</Button>
           <Button onClick={handleUpdateStatus} variant="contained" color="primary">
             Update
+          </Button>
+        </DialogActions>
+      </Dialog>
+      
+      {/* Assign Delivery Dialog */}
+      <Dialog open={assignDeliveryOpen} onClose={handleCloseAssignDelivery}>
+        <DialogTitle>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="h6">Assign Delivery Personnel</Typography>
+            <Tooltip title="Refresh delivery personnel list">
+              <IconButton onClick={fetchDeliveryPersonnel} size="small">
+                <RefreshIcon />
+              </IconButton>
+            </Tooltip>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Select a delivery person to assign to this order.
+          </DialogContentText>
+          {deliveryPersonnel.length === 0 ? (
+            <>
+              <Alert severity="warning" sx={{ mt: 2 }}>
+                No delivery personnel available. Please add delivery personnel to the system.
+              </Alert>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+                This could be due to:
+                <ul>
+                  <li>No delivery personnel have been added to the system</li>
+                  <li>API connection issue between services</li>
+                  <li>Authentication issues when fetching personnel</li>
+                </ul>
+              </Typography>
+              <Button 
+                variant="outlined" 
+                startIcon={<RefreshIcon />} 
+                sx={{ mt: 2 }}
+                onClick={fetchDeliveryPersonnel}
+                fullWidth
+              >
+                Refresh Personnel List
+              </Button>
+            </>
+          ) : (
+            <FormControl fullWidth sx={{ mt: 2 }}>
+              <InputLabel id="delivery-person-select-label">Delivery Personnel</InputLabel>
+              <Select
+                labelId="delivery-person-select-label"
+                value={selectedDeliveryPersonId}
+                label="Delivery Personnel"
+                onChange={(e) => setSelectedDeliveryPersonId(e.target.value)}
+              >
+                {deliveryPersonnel.map((person) => (
+                  <MenuItem key={person._id} value={person._id}>
+                    {person.name} {person.isMockData ? '(Test Data)' : ''}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseAssignDelivery}>Cancel</Button>
+          <Button 
+            onClick={handleAssignDelivery} 
+            variant="contained" 
+            color="primary"
+            disabled={!selectedDeliveryPersonId || deliveryPersonnel.length === 0}
+          >
+            Assign
           </Button>
         </DialogActions>
       </Dialog>

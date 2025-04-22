@@ -39,6 +39,7 @@ const FETCH_ORDERS_SUCCESS = 'FETCH_ORDERS_SUCCESS';
 const CREATE_ORDER_SUCCESS = 'CREATE_ORDER_SUCCESS';
 const UPDATE_ORDER_PAYMENT = 'UPDATE_ORDER_PAYMENT';
 const REMOVE_ORDER = 'REMOVE_ORDER';
+const UPDATE_ORDER_STATUS = 'UPDATE_ORDER_STATUS';
 
 // Reducer function
 const cartReducer = (state, action) => {
@@ -138,6 +139,20 @@ const cartReducer = (state, action) => {
       return {
         ...state,
         orderHistory: (state.orderHistory || []).filter(order => order._id !== action.payload),
+        loading: false
+      };
+
+    case UPDATE_ORDER_STATUS:
+      return {
+        ...state,
+        orderHistory: state.orderHistory.map(order =>
+          order._id === action.payload.orderId
+            ? {
+                ...order,
+                status: action.payload.status
+              }
+            : order
+        ),
         loading: false
       };
 
@@ -245,13 +260,22 @@ export const CartProvider = ({ children }) => {
   };
   
   // Fetch order history
-  const fetchOrders = async () => {
+  const fetchOrders = async (predefinedOrders) => {
     if (!isAuthenticated) {
       console.warn('Attempted to fetch orders while not authenticated');
       return;
     }
     
     dispatch({ type: SET_LOADING, payload: true });
+    
+    // If predefined orders are provided (for example, after a status update),
+    // use those instead of making an API call
+    if (predefinedOrders && Array.isArray(predefinedOrders)) {
+      console.log('Using predefined orders data:', predefinedOrders.length);
+      dispatch({ type: FETCH_ORDERS_SUCCESS, payload: predefinedOrders });
+      dispatch({ type: SET_LOADING, payload: false });
+      return;
+    }
     
     try {
       console.log('Fetching order history from API');
@@ -608,6 +632,35 @@ export const CartProvider = ({ children }) => {
     }
   };
 
+  // Update order status
+  const updateOrderStatus = async (orderId, status) => {
+    if (!isAuthenticated) {
+      console.warn('Attempted to update order status while not authenticated');
+      return false;
+    }
+    
+    dispatch({ type: SET_LOADING, payload: true });
+    
+    try {
+      console.log('Updating order status:', orderId, status);
+      const response = await orderService.updateOrderStatus(orderId, status);
+      
+      dispatch({
+        type: UPDATE_ORDER_STATUS,
+        payload: {
+          orderId,
+          status
+        }
+      });
+      
+      return true;
+    } catch (error) {
+      console.error('Error updating order status:', error);
+      dispatch({ type: SET_ERROR, payload: error.message });
+      return false;
+    }
+  };
+
   return (
     <CartContext.Provider
       value={{
@@ -636,7 +689,8 @@ export const CartProvider = ({ children }) => {
         loadUserOrders,
         addToOrderHistory,
         updateOrderPayment,
-        removeOrderFromHistory
+        removeOrderFromHistory,
+        updateOrderStatus
       }}
     >
       {children}

@@ -31,7 +31,7 @@ router.get('/restaurant-admins',
 );
 
 router.get('/delivery-personnel', 
-  restrictTo(PERMISSIONS.USER_READ), 
+  restrictTo(PERMISSIONS.DELIVERY_READ), 
   getDeliveryPersonnel
 );
 

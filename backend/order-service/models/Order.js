@@ -77,6 +77,27 @@ const OrderSchema = new mongoose.Schema({
     enum: ['Placed', 'Confirmed', 'Preparing', 'Ready', 'Out for Delivery', 'Delivered', 'Cancelled'],
     default: 'Placed'
   },
+  assignedTo: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  assignedToName: {
+    type: String
+  },
+  deliveryStatus: {
+    type: String,
+    enum: ['Unassigned', 'Assigned', 'Accepted', 'Picked Up', 'Delivered', 'Rejected'],
+    default: 'Unassigned'
+  },
+  deliveryAcceptedAt: {
+    type: Date
+  },
+  deliveryPickedUpAt: {
+    type: Date
+  },
+  deliveryCompletedAt: {
+    type: Date
+  },
   createdAt: {
     type: Date,
     default: Date.now

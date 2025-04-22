@@ -24,6 +24,17 @@ const orderService = {
     }
   },
   
+  // Get assigned orders for delivery personnel
+  getAssignedOrders: async () => {
+    try {
+      const response = await api.get('/orders/delivery/assigned');
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching assigned orders:', error);
+      throw error;
+    }
+  },
+  
   // Get a single order by ID
   getOrderById: async (orderId) => {
     try {
@@ -82,6 +93,49 @@ const orderService = {
       return response.data;
     } catch (error) {
       console.error('Error updating order status:', error);
+      throw error;
+    }
+  },
+  
+  // Assign order to delivery personnel
+  assignOrderToDelivery: async (orderId, deliveryPersonnelId, deliveryPersonnelName) => {
+    try {
+      // Handle mock delivery personnel data
+      if (deliveryPersonnelId.startsWith('dp')) {
+        console.log('Using mock delivery assignment for:', deliveryPersonnelName);
+        // Return a simulated successful response
+        return {
+          success: true,
+          data: {
+            _id: orderId,
+            assignedTo: deliveryPersonnelId,
+            assignedToName: deliveryPersonnelName,
+            deliveryStatus: 'Assigned',
+            status: 'Out for Delivery'
+          },
+          message: `Order assigned to ${deliveryPersonnelName}`
+        };
+      }
+      
+      // If not mock data, make the actual API call
+      const response = await api.put(`/orders/${orderId}/assign`, { 
+        deliveryPersonnelId, 
+        deliveryPersonnelName 
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error assigning order to delivery personnel:', error);
+      throw error;
+    }
+  },
+  
+  // Update delivery status (for delivery personnel)
+  updateDeliveryStatus: async (orderId, status) => {
+    try {
+      const response = await api.put(`/orders/${orderId}/delivery-status`, { status });
+      return response.data;
+    } catch (error) {
+      console.error('Error updating delivery status:', error);
       throw error;
     }
   }

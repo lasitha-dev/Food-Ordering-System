@@ -45,9 +45,9 @@ exports.getRestaurantAdmins = async (req, res) => {
   }
 };
 
-// @desc    Get delivery personnel
+// @desc    Get all delivery personnel
 // @route   GET /api/users/delivery-personnel
-// @access  Private/Admin
+// @access  Private - Users with delivery:read permission (Admin & Restaurant Admin)
 exports.getDeliveryPersonnel = async (req, res) => {
   try {
     const users = await User.find({ userType: 'delivery-personnel' });

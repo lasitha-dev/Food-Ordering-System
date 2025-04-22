@@ -12,6 +12,7 @@
   "license": "ISC",
   "description": "Authentication and User Management Microservice",
   "dependencies": {
+    "@mui/lab": "^7.0.0-beta.11",
     "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
