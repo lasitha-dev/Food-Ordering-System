@@ -1,12 +1,9 @@
 import axios from 'axios';
 import { getAuthToken } from '../../hooks/useAuth';
 
-// API configuration
-const API_URL = process.env.REACT_APP_RESTAURANT_SERVICE_URL || 'http://localhost:3002';
-
-// Create axios instance with default config
+// Use relative URLs for API endpoints to leverage the React development proxy
+// This avoids browser CORS issues and lets the setupProxy.js handle routing
 const apiClient = axios.create({
-  baseURL: API_URL,
   headers: {
     'Content-Type': 'application/json'
   }

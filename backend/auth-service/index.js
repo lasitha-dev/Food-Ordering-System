@@ -1,8 +1,10 @@
 require('dotenv').config();
 const express = require('express');
+const mongoose = require('mongoose');
 const connectDB = require('./config/db');
 const { connectRedis } = require('./config/redis');
 const cookieParser = require('cookie-parser');
+const cors = require('cors');
 
 // Import routes
 const authRoutes = require('./routes/authRoutes');
@@ -25,7 +27,16 @@ connectRedis().catch(err => {
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// CORS configuration
+const corsOptions = {
+  origin: ['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:3000'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+  credentials: true
+};
+
 // Middleware
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
@@ -41,6 +52,16 @@ app.use('/api/admin', adminRoutes);
 // Base route
 app.get('/', (req, res) => {
   res.send('Auth Service is running!');
+});
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'UP',
+    message: 'Auth Service is operational',
+    timestamp: new Date().toISOString(),
+    db: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+  });
 });
 
 // Error handling middleware

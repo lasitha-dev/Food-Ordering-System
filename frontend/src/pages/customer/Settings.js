@@ -10,48 +10,75 @@ import {
   IconButton,
   Alert,
   Snackbar,
-  CircularProgress
+  CircularProgress,
+  Divider,
+  FormControlLabel,
+  Checkbox
 } from '@mui/material';
 import { Edit as EditIcon, Camera as CameraIcon, Save as SaveIcon } from '@mui/icons-material';
 import useAuth from '../../hooks/useAuth';
 import CustomerLayout from '../../components/layouts/CustomerLayout';
+import addressService from '../../services/addressService';
 
 const Settings = () => {
-  const { currentUser, updateUserProfile } = useAuth();
+  const { currentUser, updateProfile } = useAuth();
   const [formData, setFormData] = useState({
-    firstName: currentUser?.firstName || '',
-    lastName: currentUser?.lastName || '',
-    email: currentUser?.email || '',
-    phone: currentUser?.phone || '',
-    address: currentUser?.address || '',
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    address: '',
+    isDefaultAddress: false
   });
   
-  const [profilePic, setProfilePic] = useState(currentUser?.profilePic || null);
+  const [profilePic, setProfilePic] = useState(null);
   const [previewImage, setPreviewImage] = useState(null);
   const [successAlert, setSuccessAlert] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const fileInputRef = React.useRef(null);
   
+  // Initialize form data with currentUser data when component mounts or currentUser changes
   useEffect(() => {
-    // Update form when currentUser changes (like after saving)
     if (currentUser) {
+      console.log('Current user data in Settings:', currentUser);
       setFormData({
         firstName: currentUser.firstName || '',
         lastName: currentUser.lastName || '',
         email: currentUser.email || '',
         phone: currentUser.phone || '',
         address: currentUser.address || '',
+        isDefaultAddress: currentUser.defaultDeliveryAddress === currentUser.address
       });
-      setProfilePic(currentUser.profilePic || null);
+      setProfilePic(currentUser.profilePic || currentUser.profilePicture || null);
     }
   }, [currentUser]);
   
+  // Fetch default address
+  useEffect(() => {
+    const fetchDefaultAddress = async () => {
+      try {
+        const defaultAddress = await addressService.getDefaultAddress();
+        if (defaultAddress) {
+          setFormData(prev => ({
+            ...prev,
+            address: defaultAddress.fullAddress || defaultAddress.address || '',
+            isDefaultAddress: true
+          }));
+        }
+      } catch (error) {
+        console.error('Error fetching default address:', error);
+      }
+    };
+    
+    fetchDefaultAddress();
+  }, []);
+  
   const handleChange = (e) => {
-    const { name, value } = e.target;
+    const { name, value, checked, type } = e.target;
     setFormData({
       ...formData,
-      [name]: value
+      [name]: type === 'checkbox' ? checked : value
     });
   };
   
@@ -79,25 +106,75 @@ const Settings = () => {
     setError(null);
     
     try {
-      // In a real implementation, you would call your API service here
-      // For demo purposes, we'll simulate a successful update
-      
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Save user info to localStorage to persist between sessions
+      // Update the user profile
       const updatedUser = {
         ...currentUser,
-        ...formData,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        email: formData.email,
+        phone: formData.phone,
+        address: formData.address,
         profilePic: previewImage || profilePic,
-        // Store the address in localStorage so checkout can access it
-        defaultDeliveryAddress: formData.address
+        profilePicture: previewImage || profilePic, // Add both variants for consistency
+        defaultDeliveryAddress: formData.isDefaultAddress ? formData.address : null
       };
       
-      localStorage.setItem('user', JSON.stringify(updatedUser));
+      // Directly update localStorage userProfile to ensure data persists
+      try {
+        const userProfileStr = localStorage.getItem('userProfile') || '{}';
+        const userProfile = JSON.parse(userProfileStr);
+        
+        const updatedProfile = {
+          ...userProfile,
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          email: formData.email,
+          phone: formData.phone,
+          address: formData.address,
+          profilePic: previewImage || profilePic,
+          profilePicture: previewImage || profilePic,
+          defaultDeliveryAddress: formData.isDefaultAddress ? formData.address : null
+        };
+        
+        localStorage.setItem('userProfile', JSON.stringify(updatedProfile));
+        console.log('Updated userProfile in localStorage:', updatedProfile);
+      } catch (localStorageError) {
+        console.error('Error updating localStorage:', localStorageError);
+      }
       
-      // If you had a real updateUserProfile function, you'd call it like:
-      // await updateUserProfile(updatedUser);
+      // Call the updateProfile function from auth context
+      const result = await updateProfile(updatedUser);
+      console.log('Profile update result:', result);
+      
+      if (!result.success) {
+        throw new Error(result.message || 'Failed to update profile');
+      }
+      
+      // Set default address if checkbox is checked
+      if (formData.isDefaultAddress) {
+        try {
+          // Check if address already exists in system
+          const addressesResponse = await addressService.getUserAddresses();
+          const addresses = addressesResponse.data?.data || [];
+          
+          const existingAddress = addresses.find(addr => 
+            addr.fullAddress === formData.address || addr.address === formData.address
+          );
+          
+          if (existingAddress) {
+            // If address exists, set it as default
+            await addressService.setDefaultAddress(existingAddress.id);
+          } else {
+            // If address doesn't exist, create it as default
+            await addressService.createAddress({
+              fullAddress: formData.address,
+              isDefault: true
+            });
+          }
+        } catch (addressError) {
+          console.error('Error setting default address:', addressError);
+        }
+      }
       
       setSuccessAlert(true);
       // Update the displayed profile pic
@@ -159,7 +236,11 @@ const Settings = () => {
                 {formData.email}
               </Typography>
               
-              {previewImage && (
+              {(previewImage || formData.firstName !== currentUser?.firstName || 
+               formData.lastName !== currentUser?.lastName ||
+               formData.email !== currentUser?.email ||
+               formData.phone !== currentUser?.phone ||
+               formData.address !== currentUser?.address) && (
                 <Button
                   variant="contained"
                   color="primary"
@@ -232,6 +313,11 @@ const Settings = () => {
                   </Grid>
                   
                   <Grid item xs={12}>
+                    <Divider sx={{ my: 2 }} />
+                    <Typography variant="h6" gutterBottom>
+                      Delivery Information
+                    </Typography>
+                    
                     <TextField
                       fullWidth
                       label="Default Delivery Address"
@@ -242,7 +328,18 @@ const Settings = () => {
                       margin="normal"
                       multiline
                       rows={2}
-                      helperText="This address will be auto-filled during checkout"
+                    />
+                    
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          checked={formData.isDefaultAddress}
+                          onChange={handleChange}
+                          name="isDefaultAddress"
+                          color="primary"
+                        />
+                      }
+                      label="Set as default delivery address for checkout"
                     />
                   </Grid>
                 </Grid>
@@ -253,17 +350,16 @@ const Settings = () => {
                   </Alert>
                 )}
                 
-                <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end' }}>
-                  <Button
-                    type="submit"
-                    variant="contained"
-                    color="primary"
-                    disabled={loading}
-                    startIcon={loading ? <CircularProgress size={24} /> : <SaveIcon />}
-                  >
-                    Save Changes
-                  </Button>
-                </Box>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  type="submit"
+                  sx={{ mt: 3 }}
+                  startIcon={<SaveIcon />}
+                  disabled={loading}
+                >
+                  {loading ? <CircularProgress size={24} /> : "Save Changes"}
+                </Button>
               </form>
             </Paper>
           </Grid>
@@ -275,7 +371,7 @@ const Settings = () => {
           onClose={() => setSuccessAlert(false)}
         >
           <Alert onClose={() => setSuccessAlert(false)} severity="success">
-            Your profile has been updated successfully!
+            Profile updated successfully!
           </Alert>
         </Snackbar>
       </Box>

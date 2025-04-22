@@ -1,6 +1,7 @@
-version: '3'
+version: '3.8'
 
 services:
+  # Frontend Service
   frontend:
     build:
       context: ./frontend
@@ -8,54 +9,138 @@ services:
     ports:
       - "3000:3000"
     depends_on:
-      - order-service
-      - auth-service
-      - restaurant-service
+      order-service:
+        condition: service_healthy
+      auth-service:
+        condition: service_healthy
+      restaurant-service:
+        condition: service_healthy
     environment:
       - REACT_APP_ORDER_SERVICE_URL=http://localhost:3003
       - REACT_APP_AUTH_SERVICE_URL=http://localhost:3001
       - REACT_APP_RESTAURANT_SERVICE_URL=http://localhost:3002
+      - DOCKER_CONTAINER=true
+      - NODE_ENV=development
+      - WDS_SOCKET_PORT=0
     networks:
       - app-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
+  # Order Service
   order-service:
-    build: ./backend/order-service
+    build: 
+      context: ./backend/order-service
+      dockerfile: Dockerfile
     ports:
       - "3003:3003"
+    depends_on:
+      redis:
+        condition: service_healthy
     environment:
+      - PORT=3003
       - MONGO_URI=mongodb+srv://dbLasitha:dbUser123@cluster0.d3qam.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0
       - JWT_SECRET=f00d0rd3r1ngSyst3mS3cr3tK3y2025
       - NODE_ENV=development
       - AUTH_SERVICE_URL=http://auth-service:3001
     networks:
       - app-network
-
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3003"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+      
+  # Auth Service
   auth-service:
-    build: ./backend/auth-service
+    build: 
+      context: ./backend/auth-service
+      dockerfile: Dockerfile
     ports:
       - "3001:3001"
+    depends_on:
+      redis:
+        condition: service_healthy
     environment:
+      - PORT=3001
       - MONGO_URI=mongodb+srv://dbLasitha:dbUser123@cluster0.d3qam.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0
       - JWT_SECRET=f00d0rd3r1ngSyst3mS3cr3tK3y2025
       - NODE_ENV=development
+      - REDIS_URI=redis://redis:6379
+      - TOKEN_BLACKLIST_PREFIX=bl_
+      - TOKEN_BLACKLIST_EXPIRE=86400
+      - JWT_EXPIRE=15m
+      - JWT_COOKIE_EXPIRE=24
+      - REFRESH_TOKEN_EXPIRE=30d
+      - REFRESH_TOKEN_COOKIE_EXPIRE=30
     networks:
       - app-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
+  # Restaurant Service
   restaurant-service:
-    build: ./backend/restaurant-service
+    build: 
+      context: ./backend/restaurant-service
+      dockerfile: Dockerfile
     ports:
       - "3002:3002"
+    depends_on:
+      redis:
+        condition: service_healthy
     environment:
+      - PORT=3002
       - MONGO_URI=mongodb+srv://dbLasitha:dbUser123@cluster0.d3qam.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0
       - JWT_SECRET=f00d0rd3r1ngSyst3mS3cr3tK3y2025
       - NODE_ENV=development
       - AUTH_SERVICE_URL=http://auth-service:3001
     networks:
       - app-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3002"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # Redis Service (for auth service token blacklisting)
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 10s
+      retries: 3
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
 networks:
   app-network:
     driver: bridge
 
 volumes:
+  redis_data:
   mongodb_data: 

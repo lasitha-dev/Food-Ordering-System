@@ -119,24 +119,40 @@ UserSchema.pre('save', async function(next) {
     return next();
   }
 
-  const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password, salt);
-  this.updatedAt = Date.now();
-  next();
+  try {
+    console.log(`Hashing password for user: ${this.email}`);
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+    this.updatedAt = Date.now();
+    console.log(`Password hashed successfully for ${this.email}`);
+    next();
+  } catch (error) {
+    console.error('Error hashing password:', error);
+    next(error);
+  }
 });
 
 // Match user entered password to hashed password in database
 UserSchema.methods.matchPassword = async function(enteredPassword) {
-  console.log('Matching password:');
-  console.log('- Entered password:', enteredPassword);
-  console.log('- Stored hash:', this.password);
-  
   try {
+    if (!this.password) {
+      console.error(`No password hash found for user: ${this.email}`);
+      return false;
+    }
+    
+    if (!this.password.startsWith('$2a$') && !this.password.startsWith('$2b$')) {
+      console.error(`Password for ${this.email} is not properly hashed. Hash prefix: ${this.password.substr(0, 4)}`);
+      return false;
+    }
+    
+    console.log(`Comparing password for ${this.email}:`);
+    console.log(`- Hash length: ${this.password.length}, starts with: ${this.password.substring(0, 10)}...`);
+    
     const isMatch = await bcrypt.compare(enteredPassword, this.password);
-    console.log('- Match result:', isMatch);
+    console.log(`- Password match result for ${this.email}: ${isMatch}`);
     return isMatch;
   } catch (error) {
-    console.error('Error comparing passwords:', error);
+    console.error(`Error comparing passwords for ${this.email}:`, error);
     return false;
   }
 };

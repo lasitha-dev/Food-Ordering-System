@@ -19,6 +19,10 @@ router.route('/users/:id')
   .delete(restrictTo(PERMISSIONS.USER_DELETE), adminController.deleteUser);
 
 router.put('/users/:id/reset-password', restrictTo(PERMISSIONS.USER_UPDATE), adminController.resetUserPassword);
+router.put('/users/:id/set-password', restrictTo(PERMISSIONS.USER_UPDATE), adminController.setUserPassword);
+
+// Add diagnostic endpoint for debugging auth issues
+router.get('/users/:id/diagnose', restrictTo(PERMISSIONS.USER_READ), adminController.diagnoseUserAuth);
 
 // Add stats endpoint
 router.get('/users/stats', restrictTo(PERMISSIONS.USER_READ), adminController.getUserStats);

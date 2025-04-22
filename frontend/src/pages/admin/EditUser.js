@@ -6,6 +6,13 @@ import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import * as authApi from '../../services/auth-service/api';
 
+// Define protected demo user emails that shouldn't be edited/deleted
+const PROTECTED_DEMO_USERS = [
+  'admin@fooddelivery.com',
+  'restaurant@example.com',
+  'delivery@example.com'
+];
+
 // Validation schema - similar to CreateUser but without password requirements
 const validationSchema = Yup.object({
   firstName: Yup
@@ -34,6 +41,7 @@ const EditUser = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [userData, setUserData] = useState(null);
+  const [isProtectedUser, setIsProtectedUser] = useState(false);
 
   // Fetch user data when component mounts
   useEffect(() => {
@@ -44,6 +52,12 @@ const EditUser = () => {
         
         if (response.success) {
           const user = response.data;
+          
+          // Check if this is a protected demo user
+          if (PROTECTED_DEMO_USERS.includes(user.email)) {
+            setIsProtectedUser(true);
+            setError('This is a demo account and cannot be edited.');
+          }
           
           // Prepare data for form
           setUserData({
@@ -81,6 +95,12 @@ const EditUser = () => {
     },
     validationSchema,
     onSubmit: async (values) => {
+      // Don't submit if this is a protected user
+      if (isProtectedUser) {
+        setError('This is a demo account and cannot be edited.');
+        return;
+      }
+      
       setIsSubmitting(true);
       setError('');
       setSuccess('');
@@ -152,6 +172,12 @@ const EditUser = () => {
         </Alert>
       )}
       
+      {isProtectedUser && (
+        <Alert severity="warning" sx={{ mb: 3 }}>
+          This is a demo account and cannot be modified. Demo accounts are protected to maintain application functionality.
+        </Alert>
+      )}
+      
       <Paper sx={{ p: 3 }}>
         <Box component="form" onSubmit={formik.handleSubmit}>
           <Grid container spacing={3}>
@@ -167,7 +193,7 @@ const EditUser = () => {
                 onBlur={formik.handleBlur}
                 error={formik.touched.firstName && Boolean(formik.errors.firstName)}
                 helperText={formik.touched.firstName && formik.errors.firstName}
-                disabled={isSubmitting}
+                disabled={isSubmitting || isProtectedUser}
               />
             </Grid>
             
@@ -183,7 +209,7 @@ const EditUser = () => {
                 onBlur={formik.handleBlur}
                 error={formik.touched.lastName && Boolean(formik.errors.lastName)}
                 helperText={formik.touched.lastName && formik.errors.lastName}
-                disabled={isSubmitting}
+                disabled={isSubmitting || isProtectedUser}
               />
             </Grid>
             
@@ -199,7 +225,7 @@ const EditUser = () => {
                 onBlur={formik.handleBlur}
                 error={formik.touched.email && Boolean(formik.errors.email)}
                 helperText={formik.touched.email && formik.errors.email}
-                disabled={isSubmitting}
+                disabled={isSubmitting || isProtectedUser}
               />
             </Grid>
             
@@ -215,7 +241,7 @@ const EditUser = () => {
                 onBlur={formik.handleBlur}
                 error={formik.touched.phone && Boolean(formik.errors.phone)}
                 helperText={formik.touched.phone && formik.errors.phone}
-                disabled={isSubmitting}
+                disabled={isSubmitting || isProtectedUser}
               />
             </Grid>
             
@@ -232,7 +258,7 @@ const EditUser = () => {
                 onBlur={formik.handleBlur}
                 error={formik.touched.userType && Boolean(formik.errors.userType)}
                 helperText={formik.touched.userType && formik.errors.userType}
-                disabled={isSubmitting}
+                disabled={isSubmitting || isProtectedUser}
               >
                 <MenuItem value="admin">Admin</MenuItem>
                 <MenuItem value="restaurant-admin">Restaurant Admin</MenuItem>
@@ -250,45 +276,37 @@ const EditUser = () => {
                       checked={formik.values.active}
                       onChange={formik.handleChange}
                       name="active"
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || isProtectedUser}
                     />
                   }
-                  label={formik.values.active ? "Active" : "Inactive"}
+                  label={formik.values.active ? 'Active' : 'Inactive'}
                 />
-                {formik.touched.active && Boolean(formik.errors.active) && (
-                  <FormHelperText error>{formik.errors.active}</FormHelperText>
-                )}
+                <FormHelperText>
+                  {formik.values.active 
+                    ? 'User can log in and access the system' 
+                    : 'User cannot log in or access the system'}
+                </FormHelperText>
               </FormControl>
             </Grid>
-            
-            <Grid item xs={12}>
-              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                Note: To change the user's password, use the "Reset Password" functionality in the admin panel.
-              </Typography>
-            </Grid>
-            
-            <Grid item xs={12} sx={{ mt: 2 }}>
-              <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <Button
-                  variant="outlined"
-                  sx={{ mr: 1 }}
-                  component={Link}
-                  to="/admin/users"
-                  disabled={isSubmitting}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  variant="contained"
-                  color="primary"
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? <CircularProgress size={24} /> : 'Save Changes'}
-                </Button>
-              </Box>
-            </Grid>
           </Grid>
+          
+          <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end' }}>
+            <Button
+              component={Link}
+              to="/admin/users"
+              sx={{ mr: 2 }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="contained"
+              color="primary"
+              disabled={isSubmitting || isProtectedUser}
+            >
+              {isSubmitting ? <CircularProgress size={24} /> : 'Save Changes'}
+            </Button>
+          </Box>
         </Box>
       </Paper>
     </Box>

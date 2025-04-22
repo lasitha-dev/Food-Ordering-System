@@ -318,18 +318,6 @@ const FoodMenu = () => {
             </FormControl>
           </Grid>
         </Grid>
-        
-        {/* Checkout button */}
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
-          <Button
-            variant="contained"
-            color="primary"
-            onClick={handleGoToCheckout}
-            startIcon={<ShoppingCartIcon />}
-          >
-            Go to Checkout
-          </Button>
-        </Box>
       </Box>
       
       {/* Food items grid */}
@@ -418,12 +406,20 @@ const FoodMenu = () => {
         )}
       </Grid>
       
-      {/* Floating checkout button for mobile */}
-      <Box sx={{ position: 'fixed', bottom: 16, right: 16, display: { xs: 'block', md: 'none' } }}>
+      {/* Floating checkout button for all screen sizes */}
+      <Box sx={{ position: 'fixed', bottom: 24, right: 24, zIndex: 1000 }}>
         <Fab
           color="primary"
           aria-label="checkout"
           onClick={handleGoToCheckout}
+          size="large"
+          sx={{ 
+            boxShadow: 3,
+            '&:hover': {
+              transform: 'scale(1.05)',
+              boxShadow: 5
+            }
+          }}
         >
           <ShoppingCartIcon />
         </Fab>

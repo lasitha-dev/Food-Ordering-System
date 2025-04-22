@@ -65,6 +65,18 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const checkLoggedIn = async () => {
       try {
+        // First, check if we have any stored user profile data
+        let storedProfileData = null;
+        try {
+          const storedProfileStr = localStorage.getItem('userProfile');
+          if (storedProfileStr) {
+            storedProfileData = JSON.parse(storedProfileStr);
+            console.log('Found stored profile data on login:', storedProfileData);
+          }
+        } catch (profileError) {
+          console.error('Error parsing stored profile:', profileError);
+        }
+        
         const token = localStorage.getItem('token');
         
         if (token) {
@@ -79,33 +91,75 @@ export const AuthProvider = ({ children }) => {
               // Get the user from the backend response
               let userData = response.data;
               
-              // Check for stored profile data (for local demo/development)
-              try {
-                const storedProfile = localStorage.getItem('userProfile');
-                if (storedProfile) {
-                  const profileData = JSON.parse(storedProfile);
-                  console.log('Found stored profile data:', profileData);
+              // Store the user's role from the backend for debugging
+              const backendUserType = userData.userType;
+              console.log('Backend user type:', backendUserType);
+              
+              // If we have stored profile data, merge it with backend data
+              if (storedProfileData) {
+                console.log('Merging stored profile data with backend data');
+                
+                // Create a merged user object that prioritizes backend data for critical fields
+                userData = {
+                  ...userData, // Start with backend data as base
                   
-                  // Merge with the response data (prioritizing profilePicture from localStorage)
-                  userData = {
-                    ...userData,
-                    ...profileData,
-                    // Only override these fields if they exist in the stored profile
-                    firstName: profileData.firstName || userData.firstName,
-                    lastName: profileData.lastName || userData.lastName,
-                    name: profileData.name || userData.name || `${profileData.firstName || ''} ${profileData.lastName || ''}`.trim(),
-                    phone: profileData.phone || userData.phone,
-                    // Most importantly, include the profile picture if available
-                    profilePicture: profileData.profilePicture || userData.profilePicture || profileData.profileImage || userData.profileImage
+                  // Only use stored profile data for UI-related profile fields
+                  firstName: storedProfileData.firstName || userData.firstName,
+                  lastName: storedProfileData.lastName || userData.lastName,
+                  phone: storedProfileData.phone || userData.phone,
+                  address: storedProfileData.address || userData.address,
+                  
+                  // IMPORTANT: ALWAYS use backend data for these critical fields
+                  userType: userData.userType, // Never use stored userType, always use backend
+                  permissions: userData.permissions, // Always use backend permissions
+                  
+                  // Special handling for profile picture and delivery address
+                  profilePicture: storedProfileData.profilePicture || storedProfileData.profilePic || 
+                                  userData.profilePicture || userData.profilePic,
+                  profilePic: storedProfileData.profilePicture || storedProfileData.profilePic || 
+                               userData.profilePicture || userData.profilePic,
+                  defaultDeliveryAddress: storedProfileData.defaultDeliveryAddress || userData.defaultDeliveryAddress,
+                };
+                
+                console.log('Merged user data with priority to backend for auth data:', userData);
+                
+                // Sync localProfile with newly merged data including the correct userType
+                localStorage.setItem('userProfile', JSON.stringify({
+                  ...storedProfileData,
+                  userType: userData.userType, // Ensure local storage has correct role
+                  permissions: userData.permissions
+                }));
+                
+                // Update the server with our merged data
+                try {
+                  const updateData = {
+                    firstName: userData.firstName,
+                    lastName: userData.lastName,
+                    phone: userData.phone,
+                    address: userData.address,
+                    profilePicture: userData.profilePicture,
+                    profilePic: userData.profilePic,
+                    defaultDeliveryAddress: userData.defaultDeliveryAddress
                   };
                   
-                  console.log('Merged user data with stored profile:', userData);
+                  await authApi.updateCurrentUser(updateData);
+                  console.log('Synchronized merged profile data to server');
+                } catch (updateError) {
+                  console.warn('Failed to synchronize profile to server:', updateError);
                 }
-              } catch (profileError) {
-                console.error('Error loading stored profile:', profileError);
               }
               
+              // Set the current user with backend data prioritized
               setCurrentUser(userData);
+              
+              // Force another update to ensure userType is consistent
+              setTimeout(() => {
+                if (userData && userData.userType) {
+                  // Force update with the backend user type to ensure consistency
+                  forceUpdateUserType(userData, backendUserType);
+                  console.log('Double-checked and enforced user type:', backendUserType);
+                }
+              }, 100);
             } else {
               // If token is invalid, clear it
               console.log('Token invalid, clearing');
@@ -183,34 +237,36 @@ export const AuthProvider = ({ children }) => {
           };
         }
         
-        console.log('Processing successful response data:', response.data);
+        console.log('Processing successful response data:', JSON.stringify(response, null, 2));
         
         // Extract token and user from the response structure
         let token = null;
         let user = null;
         
+        // The authController returns: { success: true, data: { token, user: {...} } }
         if (response.data && response.data.token && response.data.user) {
-          // Format 1: { success: true, data: { token, user } }
+          // Direct access in data object
           token = response.data.token;
           user = response.data.user;
-          console.log('Found token and user in response.data');
-        }
-        
-        if (!token && response.data && response.data.data) {
-          // Format 2: { success: true, data: { data: { token, user } } }
-          if (response.data.data.token && response.data.data.user) {
+          console.log('Found token and user directly in response.data');
+        } else if (response.data && typeof response.data === 'object') {
+          // If data property exists, check it more carefully
+          console.log('Examining response.data structure:', JSON.stringify(response.data, null, 2));
+          
+          // Check if response.data has a nested data property
+          if (response.data.data && response.data.data.token) {
             token = response.data.data.token;
             user = response.data.data.user;
-            console.log('Found token and user in response.data.data');
+            console.log('Found token and user in nested response.data.data');
           }
         }
         
         if (!token) {
-          console.error('Could not extract token and user from response:', response);
-          return { success: false, message: 'Invalid response format from server' };
+          console.error('Could not extract token and user from response:', JSON.stringify(response, null, 2));
+          return { success: false, message: 'Invalid response format from server. Please try again.' };
         }
         
-        console.log('Setting token and user:', { token, user });
+        console.log('Setting token and user:', { tokenPreview: token.substring(0, 15) + '...', user });
         
         // Decode token to check permissions
         try {
@@ -236,6 +292,29 @@ export const AuthProvider = ({ children }) => {
         
         // Update user state
         setCurrentUser(user);
+        
+        // Update userProfile in localStorage with the correct user type
+        try {
+          const currentProfile = localStorage.getItem('userProfile');
+          if (currentProfile) {
+            const profileData = JSON.parse(currentProfile);
+            // Ensure we update the userType in localStorage
+            localStorage.setItem('userProfile', JSON.stringify({
+              ...profileData,
+              userType: user.userType,
+              permissions: user.permissions
+            }));
+            console.log('Updated userProfile in localStorage with correct userType:', user.userType);
+          } else {
+            // If no profile exists, create a minimal one with the user type
+            localStorage.setItem('userProfile', JSON.stringify({
+              userType: user.userType,
+              permissions: user.permissions
+            }));
+          }
+        } catch (e) {
+          console.error('Error updating userProfile in localStorage:', e);
+        }
         
         return { success: true, user };
       } else {
@@ -265,55 +344,22 @@ export const AuthProvider = ({ children }) => {
       
       console.log('Attempting direct user registration:', registerData);
       
-      try {
-        // Try making the API call first
-        const response = await axios.post('/api/auth/register', registerData);
-        return response.data;
-      } catch (apiError) {
-        console.error('API registration failed, using mock data:', apiError);
-        
-        // Create a mock success response and store the user in localStorage
-        // This is our fallback when the API doesn't work
-        const mockUser = {
-          id: 'local_' + Date.now(),
-          name: `${registerData.firstName} ${registerData.lastName}`,
-          email: registerData.email,
-          userType: registerData.userType,
-          active: registerData.active !== undefined ? registerData.active : true
-        };
-        
-        // Save to localStorage for persistence
-        const existingUsers = JSON.parse(localStorage.getItem('createdUsers') || '[]');
-        console.log('Existing users in localStorage:', existingUsers);
-        
-        existingUsers.push(mockUser);
-        
-        // Save to localStorage and trigger storage event explicitly
-        // (localStorage events don't fire in the same window)
-        localStorage.setItem('createdUsers', JSON.stringify(existingUsers));
-        
-        // Manually dispatch a storage event to notify other components
+      // Make direct API call with retries
+      let attempts = 0;
+      const maxAttempts = 3;
+      
+      while (attempts < maxAttempts) {
         try {
-          const storageEvent = new StorageEvent('storage', {
-            key: 'createdUsers',
-            newValue: JSON.stringify(existingUsers),
-            oldValue: JSON.stringify(existingUsers.slice(0, -1)),
-            storageArea: localStorage
-          });
-          window.dispatchEvent(storageEvent);
-        } catch (eventError) {
-          console.error('Failed to dispatch storage event:', eventError);
+          attempts++;
+          const response = await axios.post('/api/auth/register', registerData);
+          console.log(`Registration successful after ${attempts} attempt(s)`);
+          return response.data;
+        } catch (error) {
+          console.error(`Registration attempt ${attempts} failed:`, error);
+          if (attempts >= maxAttempts) throw error;
+          // Wait before retry
+          await new Promise(resolve => setTimeout(resolve, 1000));
         }
-        
-        // Verify storage worked correctly
-        const savedUsers = JSON.parse(localStorage.getItem('createdUsers') || '[]');
-        console.log('Updated users in localStorage:', savedUsers);
-        
-        return {
-          success: true,
-          data: mockUser,
-          message: 'User created successfully (local mock)'
-        };
       }
     } catch (error) {
       console.error('Direct registration error:', error);
@@ -423,72 +469,68 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Logout the user
+  // Logout function
   const logout = async () => {
     try {
-      // Get user ID before logout to clear associated cart
-      const savedUser = localStorage.getItem('user');
-      let userId = null;
-      
-      if (savedUser) {
-        try {
-          const user = JSON.parse(savedUser);
-          userId = user._id || user.id;
-        } catch (error) {
-          console.error('Error parsing user for cart cleanup:', error);
-        }
+      // Call backend logout endpoint
+      try {
+        await authApi.logout();
+        console.log('Backend logout successful');
+      } catch (error) {
+        console.warn('Backend logout failed, proceeding with client-side logout:', error);
       }
       
-      // Clear tokens and user from localStorage
+      // Clear authentication state
+      localStorage.removeItem('token');
       localStorage.removeItem('accessToken');
       localStorage.removeItem('refreshToken');
-      localStorage.removeItem('token'); // For backward compatibility
       
-      // Clear all user-specific data from localStorage
-      if (userId) {
-        // Clear user-specific cart
-        localStorage.removeItem(`cart_${userId}`);
-        
-        // Clear user-specific checkout state
-        localStorage.removeItem(`checkout_state_${userId}`);
-        
-        // Clear user-specific delivery address
-        localStorage.removeItem(`delivery_address_${userId}`);
-        
-        // Clear any other user-specific data
-        // (iterate through localStorage to find and remove items with user ID)
-        Object.keys(localStorage).forEach(key => {
-          if (key.includes(userId)) {
-            localStorage.removeItem(key);
-          }
-        });
-      }
-      
-      // Finally remove the user object itself
+      // Clear user profile data
+      localStorage.removeItem('userProfile');
       localStorage.removeItem('user');
       
-      // Clear user state
+      // Clear any cart data
+      localStorage.removeItem('cart');
+      
+      // Clear any other auth-related data
+      sessionStorage.removeItem('passwordChangeUser');
+      
+      // Remove authorization header
+      delete axios.defaults.headers.common['Authorization'];
+      
+      // Reset state
       setCurrentUser(null);
-      setLoading(false);
       setError(null);
       
-      return true;
+      return { success: true };
     } catch (error) {
       console.error('Logout error:', error);
-      setError('An error occurred during logout');
-      return false;
+      return { success: false, message: error.message };
     }
   };
 
-  // Check if user has a specific role
+  // Check if current user has a specific role
   const hasRole = (role) => {
-    return currentUser?.userType === role;
+    if (!currentUser) return false;
+    
+    // Normalize role values for comparison
+    const normalizedUserType = (currentUser.userType || '').trim().toLowerCase();
+    const normalizedRole = (role || '').trim().toLowerCase();
+    
+    return normalizedUserType === normalizedRole;
   };
 
-  // Check if user has any of the specified roles
+  // Check if current user has any of the given roles
   const hasAnyRole = (roles) => {
-    if (!currentUser) return false;
-    return roles.includes(currentUser.userType);
+    if (!Array.isArray(roles) || !currentUser) return false;
+    
+    // Normalize user type for comparison
+    const normalizedUserType = (currentUser.userType || '').trim().toLowerCase();
+    
+    // Check if user has any of the roles
+    return roles.some(role => 
+      (role || '').trim().toLowerCase() === normalizedUserType
+    );
   };
 
   // Add updateProfile function to auth context
@@ -496,43 +538,54 @@ export const AuthProvider = ({ children }) => {
     try {
       console.log('Updating profile with data:', profileData);
       
-      // For now, we'll just update the local state and localStorage
-      // In a real app, this would make an API call to the backend
-      const updatedUser = {
-        ...currentUser,
-        ...profileData,
-        // Make sure name is set
-        name: profileData.name || currentUser?.name || '',
-        // Make sure we keep the user type
-        userType: currentUser?.userType || 'restaurant-admin',
-      };
+      // Prepare the data for the API call
+      const userData = { ...profileData };
       
-      // Update localStorage for persistence
-      try {
-        const storedProfile = JSON.parse(localStorage.getItem('userProfile') || '{}');
+      // Call the API to update the user profile
+      const response = await authApi.updateCurrentUser(userData);
+      
+      if (response.success) {
+        console.log('Profile updated on server successfully:', response);
         
-        // Consistently use profilePicture as the key
-        const updatedProfile = {
-          ...storedProfile,
+        // Update current user state
+        const updatedUser = {
+          ...currentUser,
           ...profileData,
-          // Ensure we have consistent naming for profile picture
-          profilePicture: profileData.profilePicture || profileData.profileImage || storedProfile.profilePicture || storedProfile.profileImage,
+          // Make sure name is set
+          name: profileData.name || currentUser?.name || '',
+          // Make sure we keep the user type
+          userType: currentUser?.userType || 'customer',
         };
         
-        localStorage.setItem('userProfile', JSON.stringify(updatedProfile));
-        console.log('Saved to localStorage:', updatedProfile);
-      } catch (err) {
-        console.error('Error saving profile to localStorage:', err);
+        // Update localStorage for persistence
+        try {
+          const storedProfile = JSON.parse(localStorage.getItem('userProfile') || '{}');
+          
+          // Consistently use profilePicture as the key
+          const updatedProfile = {
+            ...storedProfile,
+            ...profileData,
+            // Ensure we have consistent naming for profile picture
+            profilePicture: profileData.profilePicture || profileData.profileImage || storedProfile.profilePicture || storedProfile.profileImage,
+          };
+          
+          localStorage.setItem('userProfile', JSON.stringify(updatedProfile));
+          console.log('Saved to localStorage:', updatedProfile);
+        } catch (err) {
+          console.error('Error saving profile to localStorage:', err);
+        }
+        
+        // Update current user state
+        setCurrentUser(updatedUser);
+        
+        return {
+          success: true,
+          message: 'Profile updated successfully',
+          data: updatedUser
+        };
+      } else {
+        throw new Error(response.message || 'Failed to update profile on server');
       }
-      
-      // Update current user state
-      setCurrentUser(updatedUser);
-      
-      return {
-        success: true,
-        message: 'Profile updated successfully',
-        data: updatedUser
-      };
     } catch (error) {
       console.error('Error updating profile:', error);
       return {
@@ -541,6 +594,41 @@ export const AuthProvider = ({ children }) => {
         error: error.message
       };
     }
+  };
+
+  // Helper function to ensure userType is consistent
+  const forceUpdateUserType = (user, forceType = null) => {
+    if (!user) return null;
+    
+    // If a specific type is provided, use it; otherwise use the existing one
+    const userType = forceType || user.userType;
+    console.log('forceUpdateUserType - Setting userType:', userType);
+    
+    // Create updated user with correct userType
+    const updatedUser = {
+      ...user,
+      userType
+    };
+    
+    // Update in React state
+    setCurrentUser(updatedUser);
+    
+    // Update in localStorage
+    try {
+      const storedProfileStr = localStorage.getItem('userProfile');
+      if (storedProfileStr) {
+        const storedProfile = JSON.parse(storedProfileStr);
+        localStorage.setItem('userProfile', JSON.stringify({
+          ...storedProfile,
+          userType
+        }));
+        console.log('forceUpdateUserType - Updated localStorage userType to:', userType);
+      }
+    } catch (e) {
+      console.error('forceUpdateUserType - Error updating localStorage:', e);
+    }
+    
+    return updatedUser;
   };
 
   const authContextValue = {
@@ -555,7 +643,8 @@ export const AuthProvider = ({ children }) => {
     createUserDirectly,
     getUsersDirectly,
     setCurrentUser,
-    updateProfile
+    updateProfile,
+    forceUpdateUserType
   };
 
   return (

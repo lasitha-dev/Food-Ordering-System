@@ -104,64 +104,7 @@ const CreateUser = () => {
         console.log('Direct registration response:', directResponse);
         
         if (directResponse.success) {
-          // Display different message for local mock data vs actual API success
-          if (directResponse.message && directResponse.message.includes('local mock')) {
-            setSubmitSuccess('User created successfully in local storage (mock data)!');
-            
-            // Force refresh createdUsers in localStorage to ensure it's saved correctly
-            try {
-              // Get the current users
-              const currentUsers = JSON.parse(localStorage.getItem('createdUsers') || '[]');
-              
-              // Make sure the new user is included
-              if (directResponse.data && directResponse.data.id) {
-                const newUserExists = currentUsers.some(user => user.id === directResponse.data.id);
-                
-                if (!newUserExists) {
-                  // Ensure the user has a properly formatted name field (firstName + lastName)
-                  if (!directResponse.data.name && userData.firstName) {
-                    directResponse.data.name = `${userData.firstName} ${userData.lastName}`;
-                  }
-                  
-                  // Ensure userType is properly set
-                  if (!directResponse.data.userType && userData.userType) {
-                    directResponse.data.userType = userData.userType;
-                  }
-                  
-                  console.log('Saving new user to localStorage:', directResponse.data);
-                  currentUsers.push(directResponse.data);
-                  localStorage.setItem('createdUsers', JSON.stringify(currentUsers));
-                  console.log('Manually added new user to localStorage:', directResponse.data);
-                  console.log('Updated localStorage, now contains:', JSON.parse(localStorage.getItem('createdUsers')));
-                  
-                  // Dispatch a storage event to notify components in the same window
-                  try {
-                    const storageEvent = new StorageEvent('storage', {
-                      key: 'createdUsers',
-                      newValue: JSON.stringify(currentUsers),
-                      oldValue: null,
-                      storageArea: localStorage
-                    });
-                    window.dispatchEvent(storageEvent);
-                    console.log('Dispatched storage event for createdUsers');
-                    
-                    // Also dispatch a custom event for more reliable notification
-                    const customEvent = new CustomEvent('userCreated', {
-                      detail: { user: directResponse.data }
-                    });
-                    window.dispatchEvent(customEvent);
-                    console.log('Dispatched userCreated custom event');
-                  } catch (eventError) {
-                    console.error('Error dispatching storage event:', eventError);
-                  }
-                }
-              }
-            } catch (storageError) {
-              console.error('Error ensuring user was saved to localStorage:', storageError);
-            }
-          } else {
-            setSubmitSuccess('User created successfully via direct registration!');
-          }
+          setSubmitSuccess('User created successfully via direct registration!');
           
           // After a delay, navigate back to user list with refresh flag
           setTimeout(() => {

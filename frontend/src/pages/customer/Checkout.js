@@ -45,6 +45,7 @@ import { format as formatDate } from 'date-fns';
 import PaymentPortal from '../../components/payment/PaymentPortal';
 import { useNavigate } from 'react-router-dom';
 import addressService from '../../services/addressService';
+import useAuth from '../../hooks/useAuth';
 
 const OrderSummaryPaper = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(3),
@@ -103,6 +104,7 @@ const Checkout = () => {
     fetchOrders 
   } = useCart();
   const navigate = useNavigate();
+  const { currentUser } = useAuth();
   
   // State for checkout process
   const [activeStep, setActiveStep] = useState(0);
@@ -140,10 +142,17 @@ const Checkout = () => {
     const fetchAddresses = async () => {
       setIsLoadingAddresses(true);
       try {
+        // First, check if there's a default address from the user profile
+        if (currentUser?.defaultDeliveryAddress && !deliveryAddress) {
+          setDeliveryAddress(currentUser.defaultDeliveryAddress);
+        }
+        
+        // Then fetch all addresses from the API
         const response = await addressService.getUserAddresses();
         if (response.data && response.data.success) {
           setUserAddresses(response.data.data);
-          // Set default address if available and no address is currently selected
+          
+          // If we don't have an address set already, use the default one from the API
           if (response.data.data.length > 0 && !deliveryAddress) {
             const defaultAddress = response.data.data.find(addr => addr.isDefault) || response.data.data[0];
             setDeliveryAddress(defaultAddress.fullAddress);
@@ -151,13 +160,17 @@ const Checkout = () => {
         }
       } catch (error) {
         console.error('Error fetching addresses:', error);
+        // Even if API fails, try to use the address from user profile
+        if (currentUser?.defaultDeliveryAddress && !deliveryAddress) {
+          setDeliveryAddress(currentUser.defaultDeliveryAddress);
+        }
       } finally {
         setIsLoadingAddresses(false);
       }
     };
 
     fetchAddresses();
-  }, []);
+  }, [currentUser, deliveryAddress]);
 
   // Refresh order history when needed - fix infinite loop
   useEffect(() => {
@@ -360,62 +373,64 @@ const Checkout = () => {
         </Stepper>
         
         <Grid container spacing={3}>
-          <Grid item xs={12} md={8}>
+          <Grid item xs={12} md={8} lg={8}>
             {getStepContent(activeStep)}
           </Grid>
           
-          <Grid item xs={12} md={4}>
-            <OrderSummary
-              cart={cart}
-              subtotal={subtotal}
-              deliveryFee={deliveryFee}
-              tipAmount={tipAmount}
-              totalAmount={totalAmount}
-              isConfirmationStep={activeStep === 3}
-              orderData={
-                activeStep === 3 ? (
-                  // Find the matching order first
-                  orderHistory && currentOrderId && orderHistory.find(o => o._id === currentOrderId) 
-                  ? {
-                      // Use actual order data if found
-                      subtotal: orderHistory.find(o => o._id === currentOrderId).subtotal || subtotal,
-                      deliveryFee: orderHistory.find(o => o._id === currentOrderId).deliveryFee || deliveryFee,
-                      tip: orderHistory.find(o => o._id === currentOrderId).tip || tipAmount,
-                      total: orderHistory.find(o => o._id === currentOrderId).total || totalAmount
-                    }
-                  : orderComplete ? 
-                    // If order was just placed but not yet in history, use values from cart 
-                    {
-                      subtotal,
-                      deliveryFee,
-                      tip: tipAmount,
-                      total: totalAmount
-                    } 
-                  : null
-                ) : null
-              }
-            />
-            
-            <Box sx={{ mt: 3, display: 'flex', justifyContent: 'space-between' }}>
-              <Button
-                variant="outlined"
-                onClick={activeStep === 0 ? () => navigate('/customer/dashboard') : handleBack}
-                sx={{ mr: 1 }}
-              >
-                {activeStep === 0 ? 'Back to Menu' : 'Back'}
-              </Button>
-              <Button
-                variant="contained"
-                color="primary"
-                onClick={activeStep === 3 ? () => navigate('/customer/dashboard') : handleNext}
-                disabled={
-                  (activeStep === 0 && (!cart.items || cart.items.length === 0)) ||
-                  (activeStep === 1 && !deliveryAddress) ||
-                  (activeStep === 2 && (!paymentMethod || paymentMethod === ''))
+          <Grid item xs={12} md={4} lg={4}>
+            <Box sx={{ position: { md: 'sticky' }, top: { md: '100px' } }}>
+              <OrderSummary
+                cart={cart}
+                subtotal={subtotal}
+                deliveryFee={deliveryFee}
+                tipAmount={tipAmount}
+                totalAmount={totalAmount}
+                isConfirmationStep={activeStep === 3}
+                orderData={
+                  activeStep === 3 ? (
+                    // Find the matching order first
+                    orderHistory && currentOrderId && orderHistory.find(o => o._id === currentOrderId) 
+                    ? {
+                        // Use actual order data if found
+                        subtotal: orderHistory.find(o => o._id === currentOrderId).subtotal || subtotal,
+                        deliveryFee: orderHistory.find(o => o._id === currentOrderId).deliveryFee || deliveryFee,
+                        tip: orderHistory.find(o => o._id === currentOrderId).tip || tipAmount,
+                        total: orderHistory.find(o => o._id === currentOrderId).total || totalAmount
+                      }
+                    : orderComplete ? 
+                      // If order was just placed but not yet in history, use values from cart 
+                      {
+                        subtotal,
+                        deliveryFee,
+                        tip: tipAmount,
+                        total: totalAmount
+                      } 
+                    : null
+                  ) : null
                 }
-              >
-                {activeStep === steps.length - 2 ? 'Place Order' : activeStep === steps.length - 1 ? 'Done' : 'Next'}
-              </Button>
+              />
+              
+              <Box sx={{ mt: 3, display: 'flex', justifyContent: 'space-between' }}>
+                <Button
+                  variant="outlined"
+                  onClick={activeStep === 0 ? () => navigate('/customer/dashboard') : handleBack}
+                  sx={{ mr: 1 }}
+                >
+                  {activeStep === 0 ? 'Back to Menu' : 'Back'}
+                </Button>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  onClick={activeStep === 3 ? () => navigate('/customer/dashboard') : handleNext}
+                  disabled={
+                    (activeStep === 0 && (!cart.items || cart.items.length === 0)) ||
+                    (activeStep === 1 && !deliveryAddress) ||
+                    (activeStep === 2 && (!paymentMethod || paymentMethod === ''))
+                  }
+                >
+                  {activeStep === steps.length - 2 ? 'Place Order' : activeStep === steps.length - 1 ? 'Done' : 'Next'}
+                </Button>
+              </Box>
             </Box>
           </Grid>
         </Grid>
@@ -445,7 +460,7 @@ const Checkout = () => {
 // Order review component
 const OrderReview = ({ cart, handleQuantityChange, removeFromCart }) => {
   return (
-    <Paper sx={{ p: 3, mb: 3 }}>
+    <Paper sx={{ p: 3, mb: 3, width: '100%', overflowX: 'hidden' }}>
       <Typography variant="h6" gutterBottom>
         Review Your Order
       </Typography>
@@ -455,20 +470,52 @@ const OrderReview = ({ cart, handleQuantityChange, removeFromCart }) => {
           Your cart is empty. Please add items to proceed.
         </Typography>
       ) : (
-        <TableContainer>
+        <TableContainer sx={{ maxWidth: '100%', overflowX: 'auto' }}>
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell>Item</TableCell>
-                <TableCell align="right">Price</TableCell>
-                <TableCell align="right">Quantity</TableCell>
-                <TableCell align="right">Total</TableCell>
-                <TableCell align="right">Actions</TableCell>
+                <TableCell width="80px">Image</TableCell>
+                <TableCell width="30%">Item</TableCell>
+                <TableCell align="right" width="15%">Price</TableCell>
+                <TableCell align="right" width="20%">Quantity</TableCell>
+                <TableCell align="right" width="15%">Total</TableCell>
+                <TableCell align="right" width="10%">Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {cart.items.map((item) => (
                 <TableRow key={item._id}>
+                  <TableCell>
+                    {item.image ? (
+                      <Box
+                        component="img"
+                        src={item.image}
+                        alt={item.title}
+                        sx={{
+                          width: 60,
+                          height: 60,
+                          objectFit: 'cover',
+                          borderRadius: 1
+                        }}
+                      />
+                    ) : (
+                      <Box
+                        sx={{
+                          width: 60,
+                          height: 60,
+                          bgcolor: 'grey.200',
+                          borderRadius: 1,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                      >
+                        <Typography variant="caption" color="text.secondary">
+                          No img
+                        </Typography>
+                      </Box>
+                    )}
+                  </TableCell>
                   <TableCell>
                     <Typography variant="subtitle2">{item.title}</Typography>
                   </TableCell>
@@ -585,12 +632,41 @@ const DeliveryDetails = ({
   additionalInstructions, 
   setAdditionalInstructions 
 }) => {
+  const { currentUser } = useAuth();
+  const [showAddressForm, setShowAddressForm] = useState(false);
+  
+  // Pre-populate with default address when component mounts
+  useEffect(() => {
+    const fetchDefaultAddress = async () => {
+      try {
+        // Try to get default address from the address service
+        const defaultAddress = await addressService.getDefaultAddress();
+        
+        if (defaultAddress && !deliveryAddress) {
+          setDeliveryAddress(defaultAddress.fullAddress || defaultAddress.address);
+        }
+        // If no default address found from address service but user has a default delivery address
+        else if (currentUser?.defaultDeliveryAddress && !deliveryAddress) {
+          setDeliveryAddress(currentUser.defaultDeliveryAddress);
+        }
+      } catch (error) {
+        console.error('Error fetching default address:', error);
+        // Fallback to user's stored address if api call fails
+        if (currentUser?.defaultDeliveryAddress && !deliveryAddress) {
+          setDeliveryAddress(currentUser.defaultDeliveryAddress);
+        }
+      }
+    };
+    
+    fetchDefaultAddress();
+  }, [currentUser, deliveryAddress, setDeliveryAddress]);
+
   const handleAddressChange = (e) => {
     setDeliveryAddress(e.target.value);
   };
 
   return (
-    <Paper sx={{ p: 3, mb: 3 }}>
+    <Paper sx={{ p: 3, mb: 3, width: '100%' }}>
       <Typography variant="h6" gutterBottom>
         Delivery Details
       </Typography>
@@ -601,30 +677,32 @@ const DeliveryDetails = ({
             <Typography variant="subtitle1" gutterBottom>
               Your Saved Addresses
             </Typography>
-            <List>
-              {userAddresses.map((address) => (
-                <ListItem 
-                  key={address._id}
-                  sx={{ 
-                    border: '1px solid', 
-                    borderColor: 'divider',
-                    borderRadius: 1,
-                    mb: 1,
-                    cursor: 'pointer',
-                    backgroundColor: deliveryAddress === address.fullAddress ? 'action.selected' : 'transparent'
-                  }}
-                  onClick={() => setDeliveryAddress(address.fullAddress)}
-                >
-                  <ListItemText 
-                    primary={address.fullAddress}
-                    secondary={address.label || ''}
-                  />
-                  {address.isDefault && (
-                    <Chip size="small" label="Default" color="primary" variant="outlined" />
-                  )}
-                </ListItem>
-              ))}
-            </List>
+            <Box sx={{ maxHeight: '200px', overflowY: 'auto', pr: 1 }}>
+              <List>
+                {userAddresses.map((address) => (
+                  <ListItem 
+                    key={address._id}
+                    sx={{ 
+                      border: '1px solid', 
+                      borderColor: 'divider',
+                      borderRadius: 1,
+                      mb: 1,
+                      cursor: 'pointer',
+                      backgroundColor: deliveryAddress === address.fullAddress ? 'action.selected' : 'transparent'
+                    }}
+                    onClick={() => setDeliveryAddress(address.fullAddress)}
+                  >
+                    <ListItemText 
+                      primary={address.fullAddress}
+                      secondary={address.label || ''}
+                    />
+                    {address.isDefault && (
+                      <Chip size="small" label="Default" color="primary" variant="outlined" />
+                    )}
+                  </ListItem>
+                ))}
+              </List>
+            </Box>
           </Box>
         )}
         
@@ -670,7 +748,7 @@ const PaymentDetails = ({ paymentMethod, setPaymentMethod }) => {
   };
   
   return (
-    <Paper sx={{ p: 3, mb: 3 }}>
+    <Paper sx={{ p: 3, mb: 3, width: '100%' }}>
       <Typography variant="h6" gutterBottom>
         Payment Method
       </Typography>
@@ -680,12 +758,14 @@ const PaymentDetails = ({ paymentMethod, setPaymentMethod }) => {
           Select Payment Method
         </Typography>
         
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 3 }}>
           <Button
             variant={paymentMethod === 'card' ? 'contained' : 'outlined'}
             onClick={() => handlePaymentMethodSelect('card')}
             startIcon={<CreditCardIcon />}
             fullWidth
+            size="large"
+            sx={{ py: 1.5 }}
           >
             Credit/Debit Card
           </Button>
@@ -695,6 +775,8 @@ const PaymentDetails = ({ paymentMethod, setPaymentMethod }) => {
             onClick={() => handlePaymentMethodSelect('cash')}
             startIcon={<CreditCardIcon />}
             fullWidth
+            size="large"
+            sx={{ py: 1.5 }}
           >
             Cash on Delivery
           </Button>
@@ -1127,6 +1209,20 @@ const OrderConfirmation = ({
                   <List dense>
                     {(order.items || []).map((item, index) => (
                       <ListItem key={index}>
+                        {item.image && (
+                          <Box
+                            component="img"
+                            src={item.image}
+                            alt={item.title}
+                            sx={{
+                              width: 40,
+                              height: 40,
+                              objectFit: 'cover',
+                              borderRadius: 1,
+                              mr: 2
+                            }}
+                          />
+                        )}
                         <ListItemText 
                           primary={item.title} 
                           secondary={`${item.quantity} x $${item.price?.toFixed(2) || '0.00'}`} 

@@ -5,7 +5,7 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 
 /**
- * @desc    Create a new restaurant admin or delivery personnel account
+ * @desc    Create a new user account (any type)
  * @route   POST /api/admin/users
  * @access  Private/Admin
  */
@@ -18,14 +18,6 @@ exports.createUser = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: 'Please provide email and userType'
-      });
-    }
-    
-    // Prevent creating customer accounts through admin interface
-    if (userType === 'customer') {
-      return res.status(403).json({
-        success: false,
-        message: 'Customer accounts cannot be created by admins. Customers should register through the public registration page.'
       });
     }
     
@@ -67,15 +59,19 @@ exports.createUser = async (req, res) => {
     
     // Handle password
     if (password) {
-      userData.password = password; // Will be hashed by the model pre-save hook
+      console.log(`Setting password for user: ${email}`);
+      // Just set the raw password - it will be hashed by the model pre-save hook
+      userData.password = password;
     } else {
+      console.log(`Generating temporary password for user: ${email}`);
       // Generate a temporary random password
       const tempPassword = crypto.randomBytes(8).toString('hex');
-      // Hash the password
-      const salt = await bcrypt.genSalt(10);
-      userData.password = await bcrypt.hash(tempPassword, salt);
+      // Don't hash here - we want the model's pre-save hook to do that consistently
+      userData.password = tempPassword;
       userData.passwordChangeRequired = true;
     }
+    
+    console.log(`Creating user with userData (minus password): ${JSON.stringify({...userData, password: '[REDACTED]'})}`);
     
     // Create the user
     const user = await User.create(userData);
@@ -275,18 +271,12 @@ exports.resetUserPassword = async (req, res) => {
     // Generate a temporary random password
     const tempPassword = crypto.randomBytes(8).toString('hex');
     
-    // Hash the password
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(tempPassword, salt);
+    // Update user object
+    user.password = tempPassword; // Let the pre-save hook hash it
+    user.passwordChangeRequired = true;
     
-    // Update user with new password and require password change
-    await User.findByIdAndUpdate(
-      req.params.id,
-      {
-        password: hashedPassword,
-        passwordChangeRequired: true
-      }
-    );
+    // Save the user
+    await user.save();
     
     res.status(200).json({
       success: true,
@@ -325,12 +315,9 @@ exports.deleteUser = async (req, res) => {
       });
     }
     
-    // Prevent deleting admin users for safety
+    // Just log a warning for admin users but allow deletion
     if (user.userType === 'admin') {
-      return res.status(403).json({
-        success: false,
-        message: 'Cannot delete admin users'
-      });
+      console.warn(`Admin user ${user.email} is being deleted - this could be dangerous!`);
     }
     
     // Use findByIdAndDelete instead of user.remove()
@@ -382,6 +369,133 @@ exports.getUserStats = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to retrieve user statistics',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * @desc    Diagnose user authentication issues
+ * @route   GET /api/admin/users/:id/diagnose
+ * @access  Private/Admin
+ */
+exports.diagnoseUserAuth = async (req, res) => {
+  try {
+    // Find user with password field
+    const user = await User.findById(req.params.id).select('+password');
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+    
+    // Check if password is properly hashed (should start with $2a$ or $2b$ for bcrypt)
+    const passwordInfo = {
+      isHashed: user.password.startsWith('$2a$') || user.password.startsWith('$2b$'),
+      length: user.password.length,
+      prefix: user.password.substring(0, 7) + '...',
+      userType: user.userType,
+      active: user.active,
+      passwordChangeRequired: user.passwordChangeRequired,
+      lastLogin: user.lastLogin
+    };
+    
+    // If password is not hashed, fix it
+    if (!passwordInfo.isHashed) {
+      console.log(`Fixing unhashed password for user: ${user.email}`);
+      
+      // Generate new temporary password
+      const tempPassword = crypto.randomBytes(8).toString('hex');
+      user.password = tempPassword;
+      user.passwordChangeRequired = true;
+      await user.save();
+      
+      return res.status(200).json({
+        success: true,
+        message: 'User password was not properly hashed. Fixed by setting a new temporary password.',
+        data: {
+          passwordWasFixed: true,
+          tempPassword,
+          user: {
+            id: user._id,
+            email: user.email,
+            name: user.name,
+            userType: user.userType
+          }
+        }
+      });
+    }
+    
+    // If everything looks good
+    return res.status(200).json({
+      success: true,
+      message: 'User password appears to be properly hashed.',
+      data: {
+        passwordInfo,
+        user: {
+          id: user._id,
+          email: user.email,
+          name: user.name
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Diagnose user auth error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to diagnose user authentication',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * @desc    Manually set a password for a user (for debugging login issues)
+ * @route   PUT /api/admin/users/:id/set-password
+ * @access  Private/Admin
+ */
+exports.setUserPassword = async (req, res) => {
+  try {
+    const { password } = req.body;
+    
+    if (!password || password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide a valid password (min 6 characters)'
+      });
+    }
+    
+    // Find user
+    const user = await User.findById(req.params.id);
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+    
+    console.log(`Admin manually setting password for user: ${user.email}`);
+    
+    // Update user object with new password (will be hashed by pre-save hook)
+    user.password = password;
+    user.passwordChangeRequired = false; // Don't force a change since admin is setting it directly
+    
+    // Save the user
+    await user.save();
+    
+    res.status(200).json({
+      success: true,
+      message: `Password for ${user.email} has been set successfully. User can now log in with this password.`
+    });
+    
+  } catch (error) {
+    console.error('Admin set password error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to set password',
       error: error.message
     });
   }

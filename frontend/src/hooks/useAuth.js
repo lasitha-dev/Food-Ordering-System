@@ -1,9 +1,19 @@
-import { useContext } from 'react';
+import { useContext, useEffect } from 'react';
 import { AuthContext } from '../context/AuthContext';
 
 // Custom hook to use the auth context
 const useAuth = () => {
   const context = useContext(AuthContext);
+  
+  useEffect(() => {
+    if (context?.currentUser) {
+      // Log user type when it changes for debugging
+      console.log('useAuth hook - Current user type:', 
+        context.currentUser.userType,
+        'User ID:', context.currentUser.id || context.currentUser._id
+      );
+    }
+  }, [context?.currentUser]);
   
   if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');

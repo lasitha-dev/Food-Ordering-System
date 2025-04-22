@@ -95,22 +95,32 @@ const Login = () => {
           
           // Determine the correct dashboard based on user role from AuthContext
           if (result.user && result.user.userType) {
-            switch(result.user.userType) {
+            const userType = result.user.userType;
+            console.log('User type from login result:', userType);
+            
+            switch(userType) {
               case 'admin':
                 dashboardPath = '/admin';
+                console.log('Admin user detected, redirecting to /admin');
                 break;
               case 'restaurant-admin':
                 dashboardPath = '/restaurant';
+                console.log('Restaurant admin detected, redirecting to /restaurant');
                 break;
               case 'delivery-personnel':
                 dashboardPath = '/delivery';
+                console.log('Delivery personnel detected, redirecting to /delivery');
                 break;
               case 'customer':
                 dashboardPath = '/customer';
+                console.log('Customer detected, redirecting to /customer');
                 break;
               default:
                 dashboardPath = '/';
+                console.log('Unknown user type, redirecting to home page');
             }
+          } else {
+            console.warn('No user type found in login result, using default path');
           }
           
           console.log('Redirecting to dashboard:', dashboardPath);
@@ -144,12 +154,12 @@ const Login = () => {
     
     switch(type) {
       case 'admin':
-        email = 'admin@example.com';
-        password = 'password';
+        email = 'admin@fooddelivery.com';
+        password = 'Admin@123456';
         break;
       case 'restaurant':
-        email = 'restaurant@example.com';
-        password = 'password';
+        email = 'sunil@gmail.com';
+        password = 'Sunil1998!';
         break;
       case 'delivery':
         email = 'delivery@example.com';

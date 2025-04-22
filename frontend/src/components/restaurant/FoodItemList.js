@@ -63,26 +63,8 @@ const FoodItemList = () => {
         }
       }
       
-      // First, check if the restaurant service is running
-      try {
-        const response = await fetch(`${process.env.REACT_APP_RESTAURANT_SERVICE_URL || 'http://localhost:3002'}`, {
-          method: 'GET',
-          headers: {
-            'Accept': 'application/json'
-          },
-        });
-        
-        if (response.ok) {
-          console.log('Restaurant service is running');
-        } else {
-          console.warn('Restaurant service responded, but with status:', response.status);
-        }
-      } catch (serviceCheckError) {
-        console.error('Restaurant service check failed:', serviceCheckError);
-        setError('Restaurant service appears to be down. Please make sure the backend is running.');
-        setLoading(false);
-        return;
-      }
+      // Skip direct service check and use the API through the proxy instead
+      // The proxy in setupProxy.js will route the request correctly
       
       // If service is running, try to get food items
       const response = await foodItemApi.getAllFoodItems();

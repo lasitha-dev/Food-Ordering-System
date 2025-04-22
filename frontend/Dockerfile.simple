@@ -1,6 +1,9 @@
-FROM node:16-alpine
+FROM node:18-alpine
 
 WORKDIR /app
+
+# Install necessary tools for health checks
+RUN apk --no-cache add curl wget
 
 # Copy package.json and package-lock.json
 COPY package*.json ./
@@ -11,10 +14,18 @@ RUN npm install
 # Copy the rest of the application
 COPY . .
 
+# Make the entrypoint script executable
+RUN chmod +x /app/docker-entrypoint.sh
+
 # Set environment variable to bind to all network interfaces
 ENV HOST=0.0.0.0
+ENV WDS_SOCKET_PORT=0
 
+# Expose port
 EXPOSE 3000
+
+# Use the entrypoint script to set up environment variables
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 
 # Start the app
 CMD ["npm", "start"] 

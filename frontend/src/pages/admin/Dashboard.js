@@ -20,7 +20,7 @@ import useAuth from '../../hooks/useAuth';
 import * as authApi from '../../services/auth-service/api';
 
 const AdminDashboard = () => {
-  const { currentUser, getUsersDirectly } = useAuth();
+  const { currentUser, getUsersDirectly, forceUpdateUserType } = useAuth();
   const [userStats, setUserStats] = useState({
     total: 0,
     admins: 0,
@@ -31,6 +31,22 @@ const AdminDashboard = () => {
   
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // Force admin user type enforcement
+  useEffect(() => {
+    console.log('Admin Dashboard - Current user upon loading:', currentUser);
+    
+    // If user exists but doesn't have admin role, force it
+    if (currentUser && currentUser.userType !== 'admin') {
+      console.warn('Admin Dashboard - User has incorrect role. Forcing admin role:', {
+        current: currentUser.userType,
+        forcing: 'admin'
+      });
+      
+      // Force update to admin role
+      forceUpdateUserType(currentUser, 'admin');
+    }
+  }, [currentUser, forceUpdateUserType]);
 
   useEffect(() => {
     const fetchUserStats = async () => {

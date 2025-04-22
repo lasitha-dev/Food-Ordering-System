@@ -1,11 +1,8 @@
 import axios from 'axios';
 
-// Create Axios instance with base URL - use ORDER_SERVICE_URL specifically
-const ORDER_SERVICE_URL = process.env.REACT_APP_ORDER_SERVICE_URL || 'http://localhost:3003';
-
-// Create Axios instance with base URL
+// Create Axios instance with relative base URL to use React's setupProxy.js
 const api = axios.create({
-  baseURL: `${ORDER_SERVICE_URL}/api`,
+  baseURL: '/api',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json'
@@ -87,7 +84,7 @@ api.interceptors.response.use(
         
         if (refreshToken) {
           console.log('Attempting to refresh token');
-          const refreshResponse = await axios.post(`${process.env.REACT_APP_AUTH_SERVICE_URL || 'http://localhost:3001'}/api/auth/refresh-token`, {
+          const refreshResponse = await axios.post('/api/auth/refresh-token', {
             refreshToken
           });
           

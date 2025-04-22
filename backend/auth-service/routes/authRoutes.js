@@ -7,11 +7,15 @@ const {
   refreshToken,
   revokeAllTokens,
   changePassword,
-  setInitialPassword
+  setInitialPassword,
+  debugEnsureAdmin,
+  debugResetAllPasswords,
+  debugCheckDatabase
 } = require('../controllers/authController');
 const { protect } = require('../middleware/auth');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const mongoose = require('mongoose');
 
 const router = express.Router();
 
@@ -21,6 +25,11 @@ router.post('/login', login);
 router.post('/refresh', refreshToken);
 router.post('/set-password', setInitialPassword);
 router.post('/change-password', changePassword);
+
+// Debug routes - only for development
+router.get('/debug/ensure-admin', debugEnsureAdmin);
+router.get('/debug/reset-all-passwords', debugResetAllPasswords);
+router.get('/debug/check-db', debugCheckDatabase);
 
 // Protected routes
 router.get('/me', protect, getMe);
@@ -85,6 +94,15 @@ router.post('/verify-token', async (req, res) => {
       });
     }
   }
+});
+
+// Add a health check endpoint
+router.get('/health', (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'Auth service is running',
+    mongoStatus: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+  });
 });
 
 module.exports = router; 

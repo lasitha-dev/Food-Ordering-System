@@ -22,11 +22,24 @@ import {
   DialogTitle,
   TextField,
   InputAdornment,
-  CircularProgress
+  CircularProgress,
+  Tooltip
 } from '@mui/material';
-import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon, Search as SearchIcon, Refresh as RefreshIcon, LockReset as LockResetIcon } from '@mui/icons-material';
+import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon, Search as SearchIcon, Refresh as RefreshIcon, LockReset as LockResetIcon, Info as InfoIcon } from '@mui/icons-material';
 import * as authApi from '../../services/auth-service/api';
 import useAuth from '../../hooks/useAuth';
+
+// Define protected demo user emails that shouldn't be edited/deleted
+const PROTECTED_DEMO_USERS = [
+  'admin@fooddelivery.com',
+  'restaurant@example.com',
+  'delivery@example.com'
+];
+
+// Check if a user is a protected demo user
+const isProtectedDemoUser = (user) => {
+  return PROTECTED_DEMO_USERS.includes(user.email);
+};
 
 const UserManagement = () => {
   const location = useLocation();
@@ -444,7 +457,14 @@ const UserManagement = () => {
                 users.map((user) => (
                   <TableRow key={user.id}>
                     <TableCell>{user.name}</TableCell>
-                    <TableCell>{user.email}</TableCell>
+                    <TableCell>
+                      {user.email}
+                      {isProtectedDemoUser(user) && (
+                        <Tooltip title="Demo account - cannot be edited or deleted">
+                          <InfoIcon color="primary" fontSize="small" sx={{ ml: 1, verticalAlign: 'middle' }} />
+                        </Tooltip>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <Chip 
                         label={user.userType} 
@@ -463,6 +483,10 @@ const UserManagement = () => {
                       {user.userType === 'customer' ? (
                         <Typography variant="caption" color="text.secondary">
                           Self-managed account
+                        </Typography>
+                      ) : isProtectedDemoUser(user) ? (
+                        <Typography variant="caption" color="text.secondary">
+                          Demo account (protected)
                         </Typography>
                       ) : (
                         <>

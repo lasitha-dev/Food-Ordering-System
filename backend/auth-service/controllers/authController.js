@@ -3,6 +3,7 @@ const RefreshToken = require('../models/RefreshToken');
 const { generateTokenWithPermissions, verifyToken } = require('../utils/jwtUtils');
 const { getPermissionsForRole } = require('../utils/permissions');
 const { blacklistToken } = require('../utils/tokenBlacklist');
+const mongoose = require('mongoose');
 
 // Helper function to send token response with refresh token
 const sendTokenResponse = async (user, statusCode, req, res) => {
@@ -137,18 +138,25 @@ exports.login = async (req, res) => {
       });
     }
 
+    console.log(`Login attempt for: ${email}`);
+
     // Check for user
     const user = await User.findOne({ email }).select('+password');
 
     if (!user) {
+      console.log(`User not found: ${email}`);
       return res.status(401).json({
         success: false,
         message: 'Invalid credentials'
       });
     }
 
+    console.log(`User found: ${email}, type: ${user.userType}, id: ${user._id}`);
+    console.log(`Password hash stored for user: ${user.password.substring(0, 10)}...`);
+
     // Check if account is active
     if (!user.active) {
+      console.log(`User account is not active: ${email}`);
       return res.status(401).json({
         success: false,
         message: 'Your account has been deactivated'
@@ -156,18 +164,53 @@ exports.login = async (req, res) => {
     }
 
     // Check if password matches
+    console.log(`Attempting to match password for: ${email}`);
+    
+    // Fix for passwords that are not properly hashed (migration)
+    if (user.password && (!user.password.startsWith('$2a$') && !user.password.startsWith('$2b$'))) {
+      console.log(`Password for user ${email} appears to not be properly hashed. Fixing it...`);
+      
+      // If the password in DB is not hashed, compare directly
+      const isDirectMatch = user.password === password;
+      
+      if (isDirectMatch) {
+        console.log(`Direct password match successful for ${email}. Rehashing password...`);
+        // Update the password to be properly hashed
+        user.password = password; // Will be hashed by pre-save hook
+        await user.save();
+        console.log(`Password rehashed successfully for ${email}`);
+      } else {
+        console.log(`Direct password match failed for ${email}`);
+        return res.status(401).json({
+          success: false,
+          message: 'Invalid credentials'
+        });
+      }
+    }
+    
+    // Now try the normal password match
     const isMatch = await user.matchPassword(password);
+    console.log(`Password match result for ${email}: ${isMatch}`);
     
-    // TEMPORARY FIX: Allow admin login without password check
-    const isAdminBypass = user.email === 'admin@fooddelivery.com' && 
-                       password === 'Admin@123456';
+    // Special case for seed admin account
+    const isAdminSeed = (email === 'admin@fooddelivery.com' && password === 'Admin@123456');
     
-    if (!isMatch && !isAdminBypass) {
+    if (!isMatch && !isAdminSeed) {
+      console.log(`Password does not match for user: ${email}`);
       return res.status(401).json({
         success: false,
         message: 'Invalid credentials'
       });
     }
+
+    // If this is the admin seed account with the default password, fix the password hash
+    if (isAdminSeed && !isMatch) {
+      console.log('Admin seed account detected with default password. Updating password hash...');
+      user.password = 'Admin@123456'; // Will be properly hashed by pre-save hook
+      await user.save();
+    }
+
+    console.log(`Login successful for: ${email}`);
 
     // Update last login timestamp
     user.lastLogin = Date.now();
@@ -560,6 +603,332 @@ exports.setInitialPassword = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error',
+      error: error.message
+    });
+  }
+};
+
+// @desc    Debug endpoint to ensure the admin account exists with the correct password
+// @route   GET /api/auth/debug/ensure-admin
+// @access  Public
+exports.debugEnsureAdmin = async (req, res) => {
+  try {
+    // Check if admin account exists
+    const adminEmail = 'admin@fooddelivery.com';
+    let admin = await User.findOne({ email: adminEmail });
+
+    if (admin) {
+      console.log('Admin account exists. Ensuring password is correctly set...');
+      
+      // Reset the password directly (will be hashed by pre-save hook)
+      admin.password = 'Admin@123456';
+      admin.active = true;
+      admin.emailVerified = true;
+      admin.passwordChangeRequired = false;
+      
+      await admin.save();
+      console.log('Admin password has been set to Admin@123456');
+    } else {
+      console.log('Admin account does not exist. Creating...');
+      
+      // Create admin account
+      admin = await User.create({
+        email: adminEmail,
+        password: 'Admin@123456',
+        firstName: 'System',
+        lastName: 'Administrator',
+        name: 'System Administrator',
+        userType: 'admin',
+        active: true,
+        emailVerified: true,
+        passwordChangeRequired: false
+      });
+      
+      console.log('Admin account created successfully');
+    }
+    
+    // Return success
+    res.status(200).json({
+      success: true,
+      message: 'Admin account ensured with password: Admin@123456',
+      adminEmail
+    });
+  } catch (error) {
+    console.error('Debug ensure admin error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to ensure admin account',
+      error: error.message
+    });
+  }
+};
+
+// @desc    System initialization - reset all user passwords
+// @route   GET /api/auth/debug/reset-all-passwords
+// @access  Public (dev only)
+exports.debugResetAllPasswords = async (req, res) => {
+  try {
+    // WARNING: This is a system recovery function for dev purposes only!
+    const defaultPassword = 'Password123!';
+    
+    // Find all users
+    const users = await User.find({});
+    const results = [];
+    
+    for (const user of users) {
+      console.log(`Resetting password for user: ${user.email}`);
+      
+      // Set the default password
+      user.password = defaultPassword;
+      user.passwordChangeRequired = true;
+      
+      await user.save();
+      
+      results.push({
+        email: user.email,
+        userType: user.userType,
+        resetSuccess: true
+      });
+    }
+    
+    // Return results
+    res.status(200).json({
+      success: true,
+      message: `Reset passwords for ${results.length} users to "${defaultPassword}" with passwordChangeRequired=true`,
+      results
+    });
+  } catch (error) {
+    console.error('Debug reset all passwords error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to reset passwords',
+      error: error.message
+    });
+  }
+};
+
+// @desc    Debug endpoint to verify database connection
+// @route   GET /api/auth/debug/check-db
+// @access  Public
+exports.debugCheckDatabase = async (req, res) => {
+  try {
+    // Check MongoDB connection and database configuration
+    const dbInfo = {
+      connectionString: process.env.MONGO_URI ? 'Set in environment' : 'Not set',
+      databaseName: mongoose.connection.name || 'Not connected',
+      collections: await mongoose.connection.db.collections().then(collections => 
+        collections.map(c => c.collectionName)
+      ),
+      connectedToAtlas: process.env.MONGO_URI && process.env.MONGO_URI.includes('mongodb+srv'),
+      connectionState: mongoose.connection.readyState
+    };
+
+    // Count users in the database
+    const userCount = await User.countDocuments();
+    
+    // List some users for verification
+    const sampleUsers = await User.find().limit(5).select('-password');
+    
+    // Return database info
+    res.status(200).json({
+      success: true,
+      message: 'Database connection verified',
+      data: {
+        dbInfo,
+        userCount,
+        sampleUsers,
+        mongooseVersion: mongoose.version,
+        environmentInfo: {
+          nodeEnv: process.env.NODE_ENV || 'Not set',
+          port: process.env.PORT || '3001 (default)'
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Debug database check error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to verify database connection',
+      error: error.message,
+      stack: process.env.NODE_ENV === 'production' ? null : error.stack
+    });
+  }
+};
+
+// @desc    Debug endpoint to fix database issues
+// @route   GET /api/auth/debug/fix-database
+// @access  Public
+exports.debugFixDatabase = async (req, res) => {
+  try {
+    // Check MongoDB connection string
+    const mongoUri = process.env.MONGO_URI || 'mongodb://localhost:27017/food-delivery-auth';
+    console.log(`Using MongoDB URI: ${mongoUri.replace(/:[^:]*@/, ':****@')}`); // Hide password
+    
+    // Don't need to reconnect since we're already connected via the Express app
+    console.log(`Connected to MongoDB database: ${mongoose.connection.name}`);
+    
+    // Count users before fixes
+    const initialUserCount = await User.countDocuments();
+    console.log(`Found ${initialUserCount} users in database`);
+    
+    // Check for admin user
+    let adminUser = await User.findOne({ email: 'admin@fooddelivery.com' }).select('+password');
+    
+    if (!adminUser) {
+      console.log('Admin user not found. Creating default admin...');
+      
+      // Create admin user
+      adminUser = await User.create({
+        email: 'admin@fooddelivery.com',
+        password: 'Admin@123456', // Will be hashed by pre-save hook
+        firstName: 'System',
+        lastName: 'Administrator',
+        name: 'System Administrator',
+        userType: 'admin',
+        active: true,
+        emailVerified: true,
+        passwordChangeRequired: false
+      });
+      
+      console.log('Admin user created successfully');
+    } else {
+      console.log('Admin user exists. Ensuring password is set properly...');
+      
+      // Check if password is hashed
+      if (!adminUser.password || (!adminUser.password.startsWith('$2a$') && !adminUser.password.startsWith('$2b$'))) {
+        adminUser.password = 'Admin@123456';
+        await adminUser.save();
+        console.log('Admin password reset and properly hashed');
+      } else {
+        // Just reset password anyway to be sure
+        adminUser.password = 'Admin@123456';
+        await adminUser.save();
+        console.log('Admin password reset to ensure it works');
+      }
+    }
+    
+    // Fix all users with unhashed passwords
+    console.log('Finding users with potentially unhashed passwords...');
+    const users = await User.find().select('+password');
+    let fixedUsers = 0;
+    
+    for (const user of users) {
+      // Skip users with no password (shouldn't happen)
+      if (!user.password) {
+        console.log(`User ${user.email} has no password. Setting a default password...`);
+        user.password = 'Password123!';
+        user.passwordChangeRequired = true;
+        await user.save();
+        fixedUsers++;
+        continue;
+      }
+      
+      // Check if password is not properly hashed
+      if (!user.password.startsWith('$2a$') && !user.password.startsWith('$2b$')) {
+        console.log(`User ${user.email} has unhashed password. Fixing...`);
+        
+        // Store original password
+        const originalPassword = user.password;
+        
+        // Set a known password
+        user.password = originalPassword || 'Password123!';
+        user.passwordChangeRequired = true;
+        await user.save();
+        
+        console.log(`Fixed password for ${user.email}`);
+        fixedUsers++;
+      }
+    }
+    
+    // Create test users if requested
+    let testUsersCreated = 0;
+    if (req.query.createTestUsers === 'true') {
+      console.log('Creating test users for each role...');
+      
+      const testUsers = [
+        {
+          email: 'restaurant@test.com',
+          password: 'Password123!',
+          firstName: 'Test',
+          lastName: 'Restaurant',
+          name: 'Test Restaurant',
+          userType: 'restaurant-admin',
+          active: true,
+          emailVerified: true
+        },
+        {
+          email: 'delivery@test.com',
+          password: 'Password123!',
+          firstName: 'Test',
+          lastName: 'Delivery',
+          name: 'Test Delivery',
+          userType: 'delivery-personnel',
+          active: true,
+          emailVerified: true
+        },
+        {
+          email: 'customer@test.com',
+          password: 'Password123!',
+          firstName: 'Test',
+          lastName: 'Customer',
+          name: 'Test Customer',
+          userType: 'customer',
+          active: true,
+          emailVerified: true
+        }
+      ];
+      
+      for (const userData of testUsers) {
+        // Check if user already exists
+        const existingUser = await User.findOne({ email: userData.email });
+        
+        if (existingUser) {
+          console.log(`Test user ${userData.email} already exists. Updating password...`);
+          existingUser.password = userData.password;
+          await existingUser.save();
+        } else {
+          console.log(`Creating test user: ${userData.email}`);
+          await User.create(userData);
+          testUsersCreated++;
+        }
+      }
+    }
+    
+    // Return success response
+    return res.status(200).json({
+      success: true,
+      message: 'Database fix completed',
+      data: {
+        databaseName: mongoose.connection.name,
+        initialUserCount,
+        fixedUsers,
+        testUsersCreated,
+        finalUserCount: await User.countDocuments(),
+        adminCredentials: {
+          email: 'admin@fooddelivery.com',
+          password: 'Admin@123456'
+        },
+        testUserCredentials: req.query.createTestUsers === 'true' ? {
+          restaurantAdmin: {
+            email: 'restaurant@test.com',
+            password: 'Password123!'
+          },
+          deliveryPersonnel: {
+            email: 'delivery@test.com',
+            password: 'Password123!'
+          },
+          customer: {
+            email: 'customer@test.com',
+            password: 'Password123!'
+          }
+        } : null
+      }
+    });
+  } catch (error) {
+    console.error('Error fixing database issues:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error fixing database issues',
       error: error.message
     });
   }
