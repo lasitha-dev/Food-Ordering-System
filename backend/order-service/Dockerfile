@@ -9,7 +9,7 @@ RUN apk --no-cache add curl wget
 COPY package*.json ./
 
 # Install dependencies
-RUN npm ci --only=production && \
+RUN npm install --production && \
     npm install -g nodemon
 
 # Copy the rest of the application

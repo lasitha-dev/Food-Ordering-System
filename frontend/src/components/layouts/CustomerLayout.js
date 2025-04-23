@@ -33,6 +33,7 @@ import { styled, useTheme } from '@mui/material/styles';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useCart } from '../../context/CartContext';
 import useAuth from '../../hooks/useAuth';
+import NotificationBell from '../common/NotificationBell';
 
 const drawerWidth = 240;
 
@@ -183,6 +184,9 @@ const CustomerLayout = ({ children }) => {
           <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
             Food Ordering System
           </Typography>
+          
+          {/* Add NotificationBell */}
+          <NotificationBell />
           
           {/* Profile menu */}
           <Tooltip title="Account settings">

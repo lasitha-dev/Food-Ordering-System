@@ -5,13 +5,13 @@ WORKDIR /app
 # Install necessary tools for health checks
 RUN apk --no-cache add curl wget
 
-# Copy package.json and package-lock.json
+# Copy package.json and package-lock.json first to leverage Docker cache
 COPY package*.json ./
 
 # Install dependencies
 RUN npm install
 
-# Copy the rest of the application
+# Copy only the necessary files (exclude node_modules with .dockerignore)
 COPY . .
 
 # Make the entrypoint script executable

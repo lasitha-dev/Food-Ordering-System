@@ -15,6 +15,7 @@ import {
 import MenuIcon from '@mui/icons-material/Menu';
 import useAuth from '../hooks/useAuth';
 import ThemeToggle from './ThemeToggle';
+import NotificationBell from './common/NotificationBell';
 
 const Header = () => {
   const { currentUser, logout, isAuthenticated } = useAuth();
@@ -133,6 +134,8 @@ const Header = () => {
             >
               Dashboard
             </Button>
+            
+            <NotificationBell />
             
             <IconButton
               onClick={handleMenu}

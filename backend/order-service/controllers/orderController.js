@@ -496,6 +496,39 @@ exports.updateDeliveryStatus = async (req, res) => {
     
     // Save order
     await order.save();
+
+    // Send notification to customer about delivery status update
+    try {
+      // Only send notifications for customer-relevant statuses
+      if (['Accepted', 'Picked Up', 'Delivered'].includes(status)) {
+        const notificationPayload = {
+          userId: order.userId.toString(),
+          orderId: order._id.toString(),
+          status: status,
+          deliveryPersonName: req.user.name || order.assignedToName
+        };
+
+        // Make request to notification service
+        const axios = require('axios');
+        const notificationServiceUrl = process.env.NOTIFICATION_SERVICE_URL || 'http://notification-service:3006';
+        
+        await axios.post(
+          `${notificationServiceUrl}/api/delivery-notifications/status-update`,
+          notificationPayload,
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': process.env.SERVICE_API_KEY
+            }
+          }
+        );
+        
+        console.log(`Notification sent to customer for order ${order._id} with status ${status}`);
+      }
+    } catch (notificationError) {
+      // Don't fail the status update if notification fails
+      console.error('Error sending notification:', notificationError);
+    }
     
     res.status(200).json({
       success: true,
