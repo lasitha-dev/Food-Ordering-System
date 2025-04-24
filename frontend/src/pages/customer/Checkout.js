@@ -36,7 +36,8 @@ import {
   ExpandMore as ExpandMoreIcon, 
   CheckCircle as CheckCircleIcon,
   AccessTime as AccessTimeIcon,
-  CreditCard as CreditCardIcon
+  CreditCard as CreditCardIcon,
+  Payments as CashIcon
 } from '@mui/icons-material';
 import { useCart } from '../../context/CartContext';
 import { styled } from '@mui/material/styles';
@@ -101,7 +102,8 @@ const Checkout = () => {
     addToOrderHistory, 
     updateOrderPayment, 
     removeOrderFromHistory, 
-    fetchOrders 
+    fetchOrders,
+    setPaymentMethod: setCartPaymentMethod
   } = useCart();
   const navigate = useNavigate();
   const { currentUser } = useAuth();
@@ -109,10 +111,12 @@ const Checkout = () => {
   // State for checkout process
   const [activeStep, setActiveStep] = useState(0);
   const [deliveryAddress, setDeliveryAddress] = useState('');
+  const [notificationEmail, setNotificationEmail] = useState('');
   const [additionalInstructions, setAdditionalInstructions] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState(cart.paymentMethod || '');
   const [orderComplete, setOrderComplete] = useState(false);
   const [alertOpen, setAlertOpen] = useState(false);
+  const [alertMessage, setAlertMessage] = useState('');
   const [currentOrderId, setCurrentOrderId] = useState(null);
   const [userAddresses, setUserAddresses] = useState([]);
   const [isLoadingAddresses, setIsLoadingAddresses] = useState(false);
@@ -122,6 +126,20 @@ const Checkout = () => {
 
   // Add state to track paid orders
   const [paidOrders, setPaidOrders] = useState(new Set());
+
+  // Initialize email with user's email if available
+  useEffect(() => {
+    if (currentUser?.email) {
+      setNotificationEmail(currentUser.email);
+    }
+  }, [currentUser]);
+
+  // Sync component payment method with cart payment method
+  useEffect(() => {
+    if (cart.paymentMethod) {
+      setPaymentMethod(cart.paymentMethod);
+    }
+  }, [cart.paymentMethod]);
 
   // Log state changes for debugging
   useEffect(() => {
@@ -200,20 +218,30 @@ const Checkout = () => {
     if (activeStep === 0) {
       // Cart must not be empty
       if (!cart.items || cart.items.length === 0) {
+        setAlertMessage('Your cart is empty. Please add items before proceeding.');
         setAlertOpen(true);
         return;
       }
     } else if (activeStep === 1) {
       // Delivery address is required
       if (!deliveryAddress) {
+        setAlertMessage('Please provide a delivery address.');
         setAlertOpen(true);
         return;
       }
     } else if (activeStep === 2) {
       // Payment method is required
       console.log('Validating payment method:', paymentMethod); // Debug log
-      if (!paymentMethod || paymentMethod === '') {
+      if (!paymentMethod) {
         console.log('Payment method not selected, showing alert'); // Debug log
+        setAlertMessage('Please select a payment method (Credit/Debit Card or Cash on Delivery).');
+        setAlertOpen(true);
+        return;
+      }
+
+      // Verify the cart has items at this stage too
+      if (!cart.items || cart.items.length === 0) {
+        setAlertMessage('Your cart is empty. Please go back and add items before proceeding.');
         setAlertOpen(true);
         return;
       }
@@ -249,44 +277,41 @@ const Checkout = () => {
         tip: tipAmount,
         total: totalAmount
       }));
-    } catch (err) {
-      console.error('Failed to save cart to localStorage:', err);
-    }
-    
-    const orderData = {
-      items: cart.items,
-      subtotal: subtotalAmount,
-      deliveryFee: deliveryFeeAmount,
-      tip: tipAmount,
-      total: totalAmount,
-      deliveryAddress: deliveryAddress,
-      additionalInstructions: additionalInstructions || '',
-      paymentMethod: paymentMethod
-    };
-
-    try {
-      // Create the order through the API
-      console.log('Creating order with data:', orderData);
-      const newOrder = await addToOrderHistory(orderData);
       
-      if (newOrder) {
-        console.log('Order created successfully:', newOrder);
-        setCurrentOrderId(newOrder._id);
+      // Create order
+      const orderData = {
+        items: cart.items,
+        subtotal: subtotalAmount,
+        deliveryFee: deliveryFeeAmount,
+        tip: tipAmount,
+        total: totalAmount,
+        deliveryAddress,
+        additionalInstructions,
+        notificationEmail,
+        paymentMethod
+      };
+      
+      // Send order to backend API
+      const response = await addToOrderHistory(orderData);
+      
+      // If successful, advance to the next step and clear cart
+      if (response && (response._id || (response.data && response.data._id))) {
+        // Extract the order ID from the response, handling different response formats
+        const orderId = response._id || (response.data && response.data._id);
+        console.log('Order created successfully, ID:', orderId);
+        
+        setCurrentOrderId(orderId);
+        clearCart();
+        setOrderComplete(true);
+        setActiveStep(3); // Skip to confirmation
       } else {
-        console.log('Order created but no data returned');
+        console.error('Failed to process order: Invalid response format', response);
+        setAlertMessage('Failed to create order. Please try again.');
+        setAlertOpen(true);
       }
-      
-      // Mark order as complete
-      setOrderComplete(true);
-      
-      // IMPORTANT: Force navigation to confirmation step
-      console.log('Forcing navigation to confirmation step');
-      window.setTimeout(() => {
-        setActiveStep(3);
-        console.log('Active step set to:', 3);
-      }, 100);
     } catch (error) {
       console.error('Error creating order:', error);
+      setAlertMessage('An error occurred while creating your order. Please try again.');
       setAlertOpen(true);
     }
   };
@@ -299,6 +324,13 @@ const Checkout = () => {
   // Update item quantity
   const handleQuantityChange = (itemId, newQuantity) => {
     updateQuantity(itemId, newQuantity);
+  };
+
+  // Update the payment method setter function
+  const handlePaymentMethodChange = (method) => {
+    console.log('Setting payment method to:', method);
+    setPaymentMethod(method);
+    setCartPaymentMethod(method); // Also update in cart context
   };
 
   // Render appropriate step content
@@ -321,13 +353,15 @@ const Checkout = () => {
             isLoadingAddresses={isLoadingAddresses}
             additionalInstructions={additionalInstructions}
             setAdditionalInstructions={setAdditionalInstructions}
+            notificationEmail={notificationEmail}
+            setNotificationEmail={setNotificationEmail}
           />
         );
       case 2:
         return (
           <PaymentDetails
             paymentMethod={paymentMethod}
-            setPaymentMethod={setPaymentMethod}
+            setPaymentMethod={handlePaymentMethodChange}
           />
         );
       case 3:
@@ -387,71 +421,49 @@ const Checkout = () => {
                 totalAmount={totalAmount}
                 isConfirmationStep={activeStep === 3}
                 orderData={
-                  activeStep === 3 ? (
-                    // Find the matching order first
-                    orderHistory && currentOrderId && orderHistory.find(o => o._id === currentOrderId) 
-                    ? {
-                        // Use actual order data if found
-                        subtotal: orderHistory.find(o => o._id === currentOrderId).subtotal || subtotal,
-                        deliveryFee: orderHistory.find(o => o._id === currentOrderId).deliveryFee || deliveryFee,
-                        tip: orderHistory.find(o => o._id === currentOrderId).tip || tipAmount,
-                        total: orderHistory.find(o => o._id === currentOrderId).total || totalAmount
-                      }
-                    : orderComplete ? 
-                      // If order was just placed but not yet in history, use values from cart 
-                      {
-                        subtotal,
-                        deliveryFee,
-                        tip: tipAmount,
-                        total: totalAmount
-                      } 
+                  currentOrderId && orderHistory
+                    ? orderHistory.find(o => o._id === currentOrderId)
                     : null
-                  ) : null
                 }
               />
               
-              <Box sx={{ mt: 3, display: 'flex', justifyContent: 'space-between' }}>
-                <Button
-                  variant="outlined"
-                  onClick={activeStep === 0 ? () => navigate('/customer/dashboard') : handleBack}
-                  sx={{ mr: 1 }}
-                >
-                  {activeStep === 0 ? 'Back to Menu' : 'Back'}
-                </Button>
-                <Button
-                  variant="contained"
-                  color="primary"
-                  onClick={activeStep === 3 ? () => navigate('/customer/dashboard') : handleNext}
-                  disabled={
-                    (activeStep === 0 && (!cart.items || cart.items.length === 0)) ||
-                    (activeStep === 1 && !deliveryAddress) ||
-                    (activeStep === 2 && (!paymentMethod || paymentMethod === ''))
-                  }
-                >
-                  {activeStep === steps.length - 2 ? 'Place Order' : activeStep === steps.length - 1 ? 'Done' : 'Next'}
-                </Button>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2 }}>
+                {activeStep > 0 && (
+                  <Button
+                    variant="outlined"
+                    onClick={handleBack}
+                    sx={{ mr: 1 }}
+                  >
+                    Back
+                  </Button>
+                )}
+                
+                <Box sx={{ flex: '1 1 auto' }} />
+                
+                {activeStep < 3 && (
+                  <Button
+                    variant="contained"
+                    onClick={handleNext}
+                    disabled={
+                      (activeStep === 0 && (!cart.items || cart.items.length === 0)) ||
+                      (activeStep === 1 && !deliveryAddress) ||
+                      (activeStep === 2 && !paymentMethod)
+                    }
+                  >
+                    {activeStep === 2 ? 'Place Order' : 'Next'}
+                  </Button>
+                )}
               </Box>
             </Box>
           </Grid>
         </Grid>
         
-        <Snackbar 
-          open={alertOpen} 
-          autoHideDuration={6000} 
+        <Snackbar
+          open={alertOpen}
+          autoHideDuration={5000}
           onClose={() => setAlertOpen(false)}
-          anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-        >
-          <Alert 
-            onClose={() => setAlertOpen(false)} 
-            severity="error" 
-            sx={{ width: '100%' }}
-          >
-            {activeStep === 0 ? 'Please add items to your cart before proceeding.' : 
-             activeStep === 1 ? 'Please enter your delivery address.' : 
-             activeStep === 2 ? 'Please select a payment method (Credit/Debit Card or Cash on Delivery).' : 
-             'There was an error processing your order. Please try again.'}
-          </Alert>
-        </Snackbar>
+          message={alertMessage || "Please complete all required fields"}
+        />
       </Container>
     </CustomerLayout>
   );
@@ -630,7 +642,9 @@ const DeliveryDetails = ({
   userAddresses, 
   isLoadingAddresses,
   additionalInstructions, 
-  setAdditionalInstructions 
+  setAdditionalInstructions,
+  notificationEmail,
+  setNotificationEmail
 }) => {
   const { currentUser } = useAuth();
   const [showAddressForm, setShowAddressForm] = useState(false);
@@ -663,6 +677,10 @@ const DeliveryDetails = ({
 
   const handleAddressChange = (e) => {
     setDeliveryAddress(e.target.value);
+  };
+
+  const handleEmailChange = (e) => {
+    setNotificationEmail(e.target.value);
   };
 
   return (
@@ -722,6 +740,20 @@ const DeliveryDetails = ({
         />
         
         <Typography variant="subtitle1" gutterBottom>
+          Notification Email (Optional)
+        </Typography>
+        <TextField
+          fullWidth
+          variant="outlined"
+          type="email"
+          value={notificationEmail}
+          onChange={handleEmailChange}
+          placeholder="Email address for delivery notifications"
+          sx={{ mb: 3 }}
+          helperText="We'll send you status updates when your order is accepted, picked up, and delivered"
+        />
+        
+        <Typography variant="subtitle1" gutterBottom>
           Additional Instructions (Optional)
         </Typography>
         <TextField
@@ -740,7 +772,7 @@ const DeliveryDetails = ({
 
 // Payment details component
 const PaymentDetails = ({ paymentMethod, setPaymentMethod }) => {
-  console.log('Current payment method:', paymentMethod); // Debug log
+  console.log('Current payment method:', paymentMethod); // Remove activeStep reference
   
   const handlePaymentMethodSelect = (method) => {
     console.log('Setting payment method to:', method); // Debug log
@@ -773,7 +805,7 @@ const PaymentDetails = ({ paymentMethod, setPaymentMethod }) => {
           <Button
             variant={paymentMethod === 'cash' ? 'contained' : 'outlined'}
             onClick={() => handlePaymentMethodSelect('cash')}
-            startIcon={<CreditCardIcon />}
+            startIcon={<CashIcon />}
             fullWidth
             size="large"
             sx={{ py: 1.5 }}

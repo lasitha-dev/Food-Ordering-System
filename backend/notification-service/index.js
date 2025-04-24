@@ -1,64 +1,53 @@
+// Load environment variables first
 require('dotenv').config();
-const express = require('express');
-const http = require('http');
-const cors = require('cors');
-const socketIo = require('socket.io');
-const connectDB = require('./config/db');
 
-// Import routes
+const express = require('express');
+const cors = require('cors');
+const connectDB = require('./config/db');
+const http = require('http');
+const { Server } = require('socket.io');
 const notificationRoutes = require('./routes/notificationRoutes');
 const deliveryNotificationRoutes = require('./routes/deliveryNotificationRoutes');
+
+// Initialize express app
+const app = express();
+const server = http.createServer(app);
+const PORT = process.env.PORT || 3006;
 
 // Connect to database
 connectDB();
 
-// Initialize express app
-const app = express();
-const PORT = process.env.PORT || 3006;
+// Middleware
+app.use(express.json());
+app.use(cors());
 
-// Create HTTP server using the Express app
-const server = http.createServer(app);
-
-// Initialize Socket.IO with the HTTP server
-const io = socketIo(server, {
+// Initialize Socket.io
+const io = new Server(server, {
   cors: {
-    origin: ['http://localhost:3000', 'http://localhost:5173'],
-    methods: ['GET', 'POST'],
-    credentials: true
+    origin: "*",
+    methods: ["GET", "POST"],
+    allowedHeaders: ["Content-Type", "Authorization"]
   }
 });
 
-// Store io instance for use in routes
+// Store socket.io instance in app
 app.set('io', io);
 
-// CORS config
-const corsOptions = {
-  origin: ['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:3000'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'x-api-key'],
-  credentials: true
-};
-
-// Middleware
-app.use(cors(corsOptions));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-// Socket.IO connection handler
+// Socket.io connection handling
 io.on('connection', (socket) => {
-  console.log('Client connected:', socket.id);
+  console.log('New client connected', socket.id);
   
-  // Join a room based on user ID for private notifications
-  socket.on('join', (userId) => {
+  // Handle client joining user-specific room
+  socket.on('joinUserRoom', (userId) => {
     if (userId) {
-      socket.join(userId);
-      console.log(`Socket ${socket.id} joined room for user ${userId}`);
+      console.log(`User ${userId} joined their notification room`);
+      socket.join(userId.toString());
     }
   });
   
   // Handle disconnection
   socket.on('disconnect', () => {
-    console.log('Client disconnected:', socket.id);
+    console.log('Client disconnected', socket.id);
   });
 });
 
@@ -66,27 +55,26 @@ io.on('connection', (socket) => {
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/delivery-notifications', deliveryNotificationRoutes);
 
+// Health check route
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'Notification Service is running'
+  });
+});
+
 // Base route
 app.get('/', (req, res) => {
   res.send('Notification Service is running!');
 });
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.status(200).json({
-    status: 'UP',
-    message: 'Notification Service is operational',
-    timestamp: new Date().toISOString()
-  });
-});
-
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error(err.stack);
+  console.error('Error:', err.stack);
   res.status(500).json({
     success: false,
-    message: 'Server Error',
-    error: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
+    message: 'Server error',
+    error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
   });
 });
 

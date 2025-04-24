@@ -80,7 +80,8 @@ exports.createOrder = async (req, res) => {
       total,
       deliveryAddress,
       additionalInstructions,
-      paymentMethod
+      paymentMethod,
+      notificationEmail
     } = req.body;
     
     // Validate required fields
@@ -101,6 +102,7 @@ exports.createOrder = async (req, res) => {
       total,
       deliveryAddress,
       additionalInstructions: additionalInstructions || '',
+      notificationEmail: notificationEmail || '',
       paymentMethod,
       paymentStatus: paymentMethod === 'cash' ? 'pending' : 'unpaid'
     });
@@ -508,6 +510,11 @@ exports.updateDeliveryStatus = async (req, res) => {
           status: status,
           deliveryPersonName: req.user.name || order.assignedToName
         };
+
+        // Add email to notification payload if available
+        if (order.notificationEmail) {
+          notificationPayload.email = order.notificationEmail;
+        }
 
         // Make request to notification service
         const axios = require('axios');

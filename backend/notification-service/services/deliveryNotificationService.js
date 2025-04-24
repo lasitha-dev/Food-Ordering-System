@@ -1,4 +1,5 @@
 const Notification = require('../models/Notification');
+const emailService = require('./emailService');
 
 /**
  * Create a notification for delivery status update
@@ -7,11 +8,12 @@ const Notification = require('../models/Notification');
  * @param {String} payload.orderId - Order ID
  * @param {String} payload.status - New delivery status
  * @param {String} payload.deliveryPersonName - Name of delivery person (optional)
+ * @param {String} payload.email - Optional email for notifications
  * @returns {Promise<Object>} Created notification object
  */
 exports.createDeliveryStatusNotification = async (payload) => {
   try {
-    const { userId, orderId, status, deliveryPersonName } = payload;
+    const { userId, orderId, status, deliveryPersonName, email } = payload;
     
     if (!userId || !orderId || !status) {
       throw new Error('Missing required fields: userId, orderId, or status');
@@ -48,6 +50,18 @@ exports.createDeliveryStatusNotification = async (payload) => {
       }
     });
     
+    // Send email notification if email is provided and status is relevant
+    if (email && ['Accepted', 'Picked Up', 'Delivered'].includes(status)) {
+      try {
+        console.log(`Sending email notification to ${email} for order ${orderId} with status ${status}`);
+        await emailService.sendOrderStatusEmail(email, orderId, status, deliveryPersonName || 'Your delivery person');
+        console.log(`Email notification sent successfully to ${email}`);
+      } catch (emailError) {
+        // Don't fail the notification creation if email fails
+        console.error('Error sending email notification:', emailError);
+      }
+    }
+    
     return notification;
   } catch (error) {
     console.error('Error creating delivery notification:', error);
@@ -61,11 +75,12 @@ exports.createDeliveryStatusNotification = async (payload) => {
  * @param {String} payload.userId - User ID to send notification to
  * @param {String} payload.orderId - Order ID
  * @param {String} payload.status - New order status
+ * @param {String} payload.email - Optional email for notifications
  * @returns {Promise<Object>} Created notification object
  */
 exports.createOrderStatusNotification = async (payload) => {
   try {
-    const { userId, orderId, status } = payload;
+    const { userId, orderId, status, email } = payload;
     
     if (!userId || !orderId || !status) {
       throw new Error('Missing required fields: userId, orderId, or status');

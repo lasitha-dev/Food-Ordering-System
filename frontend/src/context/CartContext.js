@@ -14,12 +14,13 @@ const initialState = {
   total: 0,
   delivery: {
     fee: 0,
-    free: false
+    address: ''
   },
   tip: {
     amount: 0,
     percentage: 0
   },
+  paymentMethod: '',
   loading: false,
   error: null,
   orderHistory: []
@@ -40,6 +41,7 @@ const CREATE_ORDER_SUCCESS = 'CREATE_ORDER_SUCCESS';
 const UPDATE_ORDER_PAYMENT = 'UPDATE_ORDER_PAYMENT';
 const REMOVE_ORDER = 'REMOVE_ORDER';
 const UPDATE_ORDER_STATUS = 'UPDATE_ORDER_STATUS';
+const SET_PAYMENT_METHOD = 'SET_PAYMENT_METHOD';
 
 // Reducer function
 const cartReducer = (state, action) => {
@@ -64,7 +66,7 @@ const cartReducer = (state, action) => {
         total: action.payload.total || 0,
         delivery: action.payload.delivery || {
           fee: 0,
-          free: false
+          address: ''
         },
         tip: action.payload.tip || {
           amount: 0,
@@ -154,6 +156,12 @@ const cartReducer = (state, action) => {
             : order
         ),
         loading: false
+      };
+
+    case SET_PAYMENT_METHOD:
+      return {
+        ...state,
+        paymentMethod: action.payload
       };
 
     default:
@@ -249,7 +257,7 @@ export const CartProvider = ({ children }) => {
           payload: {
             items: [],
             total: 0,
-            delivery: { fee: 0, free: false },
+            delivery: { fee: 0, address: '' },
             tip: { amount: 0, percentage: 0 }
           } 
         });
@@ -499,6 +507,16 @@ export const CartProvider = ({ children }) => {
     dispatch({ type: SET_LOADING, payload: true });
     
     try {
+      // Validate cart has items
+      if (!orderDetails.items || orderDetails.items.length === 0) {
+        console.error('Cannot create order with empty cart');
+        dispatch({ 
+          type: SET_ERROR, 
+          payload: 'Cannot create order with empty cart' 
+        });
+        return null;
+      }
+      
       console.log('Creating new order via API:', orderDetails);
       const response = await orderService.createOrder(orderDetails);
       console.log('Raw order API response:', response);
@@ -661,6 +679,12 @@ export const CartProvider = ({ children }) => {
     }
   };
 
+  // Add a setPaymentMethod function
+  const setPaymentMethod = (method) => {
+    dispatch({ type: SET_PAYMENT_METHOD, payload: method });
+    return true;
+  };
+
   return (
     <CartContext.Provider
       value={{
@@ -669,7 +693,8 @@ export const CartProvider = ({ children }) => {
           items: state.items,
           total: state.total,
           delivery: state.delivery,
-          tip: state.tip
+          tip: state.tip,
+          paymentMethod: state.paymentMethod
         },
         orderHistory: state.orderHistory,
         loading: state.loading,
@@ -677,6 +702,8 @@ export const CartProvider = ({ children }) => {
         isAuthenticated,
         
         // Cart actions
+        fetchCart,
+        fetchOrders,
         addToCart,
         removeFromCart,
         updateQuantity,
@@ -685,12 +712,12 @@ export const CartProvider = ({ children }) => {
         setDeliveryFee,
         
         // Order actions
-        fetchOrders,
         loadUserOrders,
         addToOrderHistory,
         updateOrderPayment,
         removeOrderFromHistory,
-        updateOrderStatus
+        updateOrderStatus,
+        setPaymentMethod
       }}
     >
       {children}
