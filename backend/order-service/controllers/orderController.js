@@ -207,8 +207,8 @@ exports.deleteOrder = async (req, res) => {
       });
     }
     
-    // Only allow users to delete their own orders
-    if (order.userId.toString() !== req.user.id) {
+    // Allow either the order owner or restaurant admins to delete the order
+    if (order.userId.toString() !== req.user.id && req.user.userType !== 'restaurant-admin') {
       return res.status(403).json({
         success: false,
         message: 'Not authorized to delete this order'
@@ -216,11 +216,12 @@ exports.deleteOrder = async (req, res) => {
     }
     
     // Delete order
-    await order.remove();
+    await order.deleteOne();
     
     res.status(200).json({
       success: true,
-      data: {}
+      data: {},
+      message: 'Order successfully deleted'
     });
   } catch (error) {
     console.error('Error deleting order:', error);

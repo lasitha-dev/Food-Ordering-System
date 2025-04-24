@@ -52,7 +52,8 @@ import {
   CreditCard as CardIcon,
   AccessTime as PendingIcon,
   Done as DoneIcon,
-  Person as PersonIcon
+  Person as PersonIcon,
+  Delete as DeleteIcon
 } from '@mui/icons-material';
 import { format } from 'date-fns';
 import orderService from '../../services/orderService';
@@ -191,6 +192,8 @@ const RestaurantOrders = () => {
     message: '',
     severity: 'success'
   });
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [orderToDelete, setOrderToDelete] = useState(null);
   
   // Fetch orders from API
   const fetchOrders = async () => {
@@ -462,6 +465,50 @@ const RestaurantOrders = () => {
     setSnackbar({ ...snackbar, open: false });
   };
   
+  // Handle open delete confirmation dialog
+  const handleOpenDeleteConfirm = (order) => {
+    setOrderToDelete(order);
+    setDeleteConfirmOpen(true);
+  };
+  
+  // Handle close delete confirmation dialog
+  const handleCloseDeleteConfirm = () => {
+    setDeleteConfirmOpen(false);
+    setOrderToDelete(null);
+  };
+  
+  // Handle delete order
+  const handleDeleteOrder = async () => {
+    if (!orderToDelete) return;
+    
+    setLoading(true);
+    try {
+      const response = await orderService.deleteOrder(orderToDelete._id);
+      console.log('Delete order response:', response);
+      
+      // Remove the deleted order from the state
+      const updatedOrders = orders.filter(order => order._id !== orderToDelete._id);
+      setOrders(updatedOrders);
+      applyFilters(updatedOrders);
+      
+      setSnackbar({
+        open: true,
+        message: 'Order successfully deleted',
+        severity: 'success'
+      });
+    } catch (error) {
+      console.error('Error deleting order:', error);
+      setSnackbar({
+        open: true,
+        message: `Failed to delete order: ${error.response?.data?.message || error.message}`,
+        severity: 'error'
+      });
+    } finally {
+      setLoading(false);
+      handleCloseDeleteConfirm();
+    }
+  };
+  
   // Loading state
   if (loading) {
     return (
@@ -697,6 +744,14 @@ const RestaurantOrders = () => {
                         disabled={!!order.assignedTo}
                       >
                         <DeliveryIcon />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Delete Order">
+                      <IconButton 
+                        onClick={() => handleOpenDeleteConfirm(order)}
+                        color="error"
+                      >
+                        <DeleteIcon />
                       </IconButton>
                     </Tooltip>
                   </Box>
@@ -969,6 +1024,37 @@ const RestaurantOrders = () => {
             disabled={!selectedDeliveryPersonId || deliveryPersonnel.length === 0}
           >
             Assign
+          </Button>
+        </DialogActions>
+      </Dialog>
+      
+      {/* Delete confirmation dialog */}
+      <Dialog
+        open={deleteConfirmOpen}
+        onClose={handleCloseDeleteConfirm}
+      >
+        <DialogTitle>Confirm Order Deletion</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to delete this order? This action cannot be undone.
+          </DialogContentText>
+          {orderToDelete && (
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="subtitle2">Order ID: {orderToDelete._id.substring(orderToDelete._id.length - 8)}</Typography>
+              <Typography variant="subtitle2">Total: {formatCurrency(orderToDelete.total)}</Typography>
+              <Typography variant="subtitle2">Status: {orderToDelete.status}</Typography>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseDeleteConfirm}>Cancel</Button>
+          <Button 
+            onClick={handleDeleteOrder} 
+            color="error" 
+            variant="contained"
+            disabled={loading}
+          >
+            {loading ? 'Deleting...' : 'Delete'}
           </Button>
         </DialogActions>
       </Dialog>
