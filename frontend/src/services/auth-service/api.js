@@ -673,4 +673,74 @@ export const updateCurrentUser = async (userData) => {
       message: 'Failed to update profile: ' + (error.message || 'Unknown error')
     };
   }
+};
+
+/**
+ * Get user counts by role
+ * @returns {Promise<Object>} Object containing user counts by role
+ */
+export const getUserCountsByRole = async () => {
+  try {
+    // Build query parameters to get all users without pagination
+    const queryParams = new URLSearchParams();
+    queryParams.append('limit', 1000); // Large limit to get all users
+    
+    const url = `${ADMIN_URL}/users?${queryParams.toString()}`;
+    console.log(`Fetching user counts from: ${url}`);
+    
+    const response = await axios.get(url);
+    
+    if (response.data.success) {
+      const users = response.data.data || [];
+      
+      // Initialize counters
+      const stats = {
+        total: users.length,
+        admins: 0,
+        restaurantAdmins: 0,
+        deliveryPersonnel: 0,
+        customers: 0
+      };
+      
+      // Count each user type
+      users.forEach(user => {
+        const userType = (user.userType || '').toLowerCase();
+        switch(userType) {
+          case 'admin':
+            stats.admins++;
+            break;
+          case 'restaurant-admin':
+            stats.restaurantAdmins++;
+            break;
+          case 'delivery-personnel':
+            stats.deliveryPersonnel++;
+            break;
+          case 'customer':
+            stats.customers++;
+            break;
+          default:
+            console.warn('Unknown user type:', userType);
+            break;
+        }
+      });
+      
+      return {
+        success: true,
+        data: stats
+      };
+    }
+    
+    return {
+      success: false,
+      message: 'Failed to get user counts',
+      error: 'API returned failure'
+    };
+  } catch (error) {
+    console.error('Failed to get user counts:', error);
+    return {
+      success: false,
+      message: 'Failed to get user counts',
+      error: error.message
+    };
+  }
 }; 

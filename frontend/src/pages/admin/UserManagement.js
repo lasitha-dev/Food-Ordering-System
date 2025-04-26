@@ -87,6 +87,18 @@ const UserManagement = () => {
     };
   }, [roleFilter]);
   
+  // Parse URL query parameters for initial role filter
+  useEffect(() => {
+    // Check for URL query parameters
+    const params = new URLSearchParams(location.search);
+    const roleParam = params.get('role');
+    
+    if (roleParam) {
+      console.log(`Setting initial role filter from URL: ${roleParam}`);
+      setRoleFilter(roleParam);
+    }
+  }, [location.search]);
+  
   // Force refresh when receiving navigation state with refresh:true
   useEffect(() => {
     if (location.state?.refresh) {
@@ -397,6 +409,12 @@ const UserManagement = () => {
         // Update UI
         setUsers(users.filter(user => user.id !== userToDelete.id));
         setDeleteDialogOpen(false);
+        
+        // Dispatch custom event to notify other components about the deletion
+        window.dispatchEvent(new CustomEvent('userListRefresh', { 
+          detail: { action: 'delete', userId: userToDelete.id, userType: userToDelete.userType } 
+        }));
+        
         return;
       }
       
@@ -410,6 +428,11 @@ const UserManagement = () => {
           
           // Close dialog
           handleDeleteDialogClose();
+          
+          // Dispatch custom event to notify other components about the deletion
+          window.dispatchEvent(new CustomEvent('userListRefresh', { 
+            detail: { action: 'delete', userId: userToDelete.id, userType: userToDelete.userType } 
+          }));
         } else {
           setError(response.message || 'Failed to delete user');
         }
@@ -527,6 +550,17 @@ const UserManagement = () => {
     );
   };
 
+  // Add a function to handle manual refresh
+  const handleManualRefresh = () => {
+    console.log('Manual refresh triggered');
+    setRefreshKey(prev => prev + 1);
+    
+    // Dispatch custom event to notify other components about the refresh
+    window.dispatchEvent(new CustomEvent('userListRefresh', { 
+      detail: { action: 'refresh' } 
+    }));
+  };
+
   return (
     <Box>
       <Box 
@@ -545,7 +579,7 @@ const UserManagement = () => {
             variant="outlined"
             color="primary"
             startIcon={<RefreshIcon />}
-            onClick={() => setRefreshKey(prev => prev + 1)}
+            onClick={handleManualRefresh}
             sx={{ mr: 1 }}
           >
             Refresh
