@@ -185,15 +185,27 @@ export const resetPassword = async (token, newPassword) => {
 };
 
 // User management API calls
-export const getUsers = async (filters = {}) => {
+export const getUsers = async (page = 1, limit = 10, search = '', userType = '') => {
   try {
-    // Build query string from filters
-    const queryParams = Object.entries(filters)
-      .filter(([_, value]) => value !== undefined && value !== '')
-      .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
-      .join('&');
+    // Build query parameters for pagination, search, and filter
+    const queryParams = new URLSearchParams();
     
-    const url = `${ADMIN_URL}/users${queryParams ? `?${queryParams}` : ''}`;
+    // Add pagination
+    queryParams.append('page', page);
+    queryParams.append('limit', limit);
+    
+    // Add search if provided
+    if (search && search.trim() !== '') {
+      queryParams.append('search', search.trim());
+    }
+    
+    // Add userType filter if provided
+    if (userType && userType.trim() !== '') {
+      queryParams.append('userType', userType.trim());
+    }
+    
+    const url = `${ADMIN_URL}/users?${queryParams.toString()}`;
+    console.log(`Calling API with URL: ${url}`);
     
     const response = await axios.get(url);
     return response.data;
@@ -206,6 +218,45 @@ export const getUsers = async (filters = {}) => {
     });
     
     throw error.response?.data || { success: false, message: 'Network error' };
+  }
+};
+
+/**
+ * Get users directly with pagination and search filtering support
+ * @param {number} page - Page number (default: 1)
+ * @param {number} limit - Items per page (default: 10)
+ * @param {string} search - Optional search term for filtering
+ * @param {string} userType - Optional user type filter
+ * @returns {Promise<Object>} User data response
+ */
+export const getUsersDirectly = async (page = 1, limit = 10, search = '', userType = '') => {
+  try {
+    // Build query parameters
+    const queryParams = new URLSearchParams();
+    if (page) queryParams.append('page', page);
+    if (limit) queryParams.append('limit', limit);
+    if (search) queryParams.append('search', search);
+    if (userType) queryParams.append('userType', userType);
+    
+    // Make the API request
+    const response = await axios.get(`${ADMIN_URL}/users?${queryParams.toString()}`);
+    
+    if (response.data.success) {
+      return response.data;
+    }
+    
+    return {
+      success: false,
+      message: 'Failed to get users directly',
+      error: 'API returned failure'
+    };
+  } catch (error) {
+    console.error('Failed to get users directly:', error);
+    return {
+      success: false,
+      message: 'Failed to get users directly',
+      error: error.message
+    };
   }
 };
 
@@ -382,36 +433,34 @@ export const getUser = async (userId) => {
 
 export const createUser = async (userData) => {
   try {
-    // Get the token from localStorage
-    const token = localStorage.getItem('token');
-    
-    // Transform the data to match the backend expectations
-    const transformedData = {
-      ...userData,
-      // If the backend expects name instead of firstName/lastName
-      name: userData.firstName && userData.lastName 
-        ? `${userData.firstName} ${userData.lastName}`
-        : userData.name || '',
-    };
-
-    // Log the data being sent
-    console.log('Creating user with transformed data:', transformedData);
-    
-    // Log authorization details for debugging
     console.log('Creating user with authorization:', {
-      headers: {
-        'Authorization': token ? `Bearer ${token}` : 'No token',
-        'Content-Type': 'application/json'
-      }
+      headers: axios.defaults.headers.common 
     });
     
-    // Use explicit headers setting for admin endpoints
-    const response = await axios.post(`${ADMIN_URL}/users`, transformedData, {
-      headers: {
-        'Authorization': token ? `Bearer ${token}` : '',
-        'Content-Type': 'application/json'
+    const response = await axios.post(`${ADMIN_URL}/users`, userData);
+    
+    // Add to localStorage as backup for demo/development
+    if (response.data.success) {
+      try {
+        const newUser = response.data.data.user;
+        if (newUser) {
+          const existingUsers = JSON.parse(localStorage.getItem('createdUsers') || '[]');
+          const userExists = existingUsers.some(user => user.email === newUser.email);
+          
+          if (!userExists) {
+            localStorage.setItem('createdUsers', JSON.stringify([...existingUsers, {
+              ...newUser,
+              id: newUser.id || newUser._id || `local_${Date.now()}`
+            }]));
+            
+            // Trigger storage event for other components
+            window.dispatchEvent(new Event('storage'));
+          }
+        }
+      } catch (storageError) {
+        console.warn('Failed to store new user in localStorage:', storageError);
       }
-    });
+    }
     
     return response.data;
   } catch (error) {
@@ -422,7 +471,25 @@ export const createUser = async (userData) => {
       data: error.response?.data
     });
     
-    throw error.response?.data || { success: false, message: 'Network error' };
+    // Check for specific error types
+    if (error.response?.data?.message?.includes('already exists')) {
+      return {
+        success: false,
+        message: 'User with this email already exists',
+        error: 'duplicate_email'
+      };
+    }
+    
+    if (error.response?.data) {
+      return error.response.data;  // Return the error response from the server
+    }
+    
+    // Default error
+    return { 
+      success: false, 
+      message: error.message || 'Failed to create user',
+      error: error.code || 'unknown_error'
+    };
   }
 };
 

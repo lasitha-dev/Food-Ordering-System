@@ -6,12 +6,56 @@ const { PERMISSIONS } = require('../utils/permissions');
 // @access  Private/Admin
 exports.getUsers = async (req, res) => {
   try {
-    const users = await User.find();
+    // Extract query parameters
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 10;
+    const search = req.query.search || '';
+    const userType = req.query.userType || '';
+    
+    // Calculate pagination
+    const skip = (page - 1) * limit;
+    
+    // Build query
+    let query = {};
+    
+    // Apply userType filter if specified
+    if (userType) {
+      query.userType = userType;
+    }
+    
+    // Apply search filter if specified (search by name or email)
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { firstName: { $regex: search, $options: 'i' } },
+        { lastName: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } }
+      ];
+    }
+    
+    // Debug info
+    console.log('Users query:', JSON.stringify({
+      query,
+      pagination: { page, limit, skip }
+    }));
+    
+    // Count total users matching query (for pagination)
+    const totalUsers = await User.countDocuments(query);
+    
+    // Get paginated users
+    const users = await User.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
     
     res.status(200).json({
       success: true,
       count: users.length,
-      data: users
+      data: users,
+      total: totalUsers,
+      page,
+      limit,
+      pages: Math.ceil(totalUsers / limit)
     });
   } catch (error) {
     console.error('Get users error:', error);

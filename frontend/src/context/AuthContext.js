@@ -2,6 +2,64 @@ import React, { createContext, useState, useEffect } from 'react';
 import axios from 'axios';
 import * as authApi from '../services/auth-service/api';
 
+// Create a configured axios instance for API calls
+const axiosInstance = axios.create();
+
+// Add default headers and interceptors
+axiosInstance.interceptors.request.use(
+  (config) => {
+    // Add authorization header if token exists
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers['Authorization'] = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+// Handle response errors
+axiosInstance.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    console.error('API error:', error);
+    return Promise.reject(error);
+  }
+);
+
+// Configuration value - can be imported from env or config file in a real app
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
+
+// Mock users function for local development/testing
+const getMockUsers = () => {
+  // Default admin user
+  const defaultUsers = [
+    {
+      id: 'mock_admin_1',
+      name: 'Admin User',
+      email: 'admin@example.com',
+      userType: 'admin',
+      active: true
+    },
+    {
+      id: 'mock_restaurant_1',
+      name: 'Restaurant Admin',
+      email: 'restaurant@example.com',
+      userType: 'restaurant-admin',
+      active: true
+    },
+    {
+      id: 'mock_delivery_1',
+      name: 'Delivery Personnel',
+      email: 'delivery@example.com',
+      userType: 'delivery-personnel',
+      active: true
+    }
+  ];
+  
+  return defaultUsers;
+};
+
 export const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
@@ -367,105 +425,155 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Helper to get users directly from the database
-  const getUsersDirectly = async (page = 1, limit = 10, search = '') => {
+  // Fetch users with optional pagination, search, and user type filtering 
+  const getUsersDirectly = async (page = 1, limit = 10, search = '', userType = '') => {
     try {
-      console.log('Fetching users directly with token:', localStorage.getItem('token'));
+      console.log(`Getting users with params: page=${page}, limit=${limit}, search=${search}, userType=${userType}`);
       
-      // For now, use mock data since we have persistent permission issues
-      // This simulates what we'd get from the server
-      const mockUsers = [
-        { id: '1', name: 'Admin User', email: 'admin@fooddelivery.com', userType: 'admin', active: true },
-        { id: '2', name: 'Restaurant Manager', email: 'restaurant@example.com', userType: 'restaurant-admin', active: true },
-        { id: '3', name: 'Delivery Person', email: 'delivery@example.com', userType: 'delivery-personnel', active: true },
-        { id: '4', name: 'Customer User', email: 'customer@example.com', userType: 'customer', active: true },
-        { id: '5', name: 'Inactive User', email: 'inactive@example.com', userType: 'customer', active: false },
-      ];
+      // Try API endpoint first if we have a base URL configured
+      if (API_BASE_URL && API_BASE_URL.trim() !== '') {
+        try {
+          const apiUrl = `${API_BASE_URL}/users`;
+          console.log(`Attempting API call to: ${apiUrl}`);
+          
+          const response = await axiosInstance.get(apiUrl, {
+            params: { page, limit, search, userType }
+          });
+          
+          console.log('API user fetch response:', response.data);
+          return {
+            success: true,
+            data: response.data
+          };
+        } catch (apiError) {
+          console.error('API user fetch failed:', apiError);
+          // Continue to fallback
+        }
+      } else {
+        console.log('No API_BASE_URL configured, skipping API fetch');
+      }
       
-      // Add any users we've created during this session
-      let newUsers = [];
+      // Fallback to local data
+      console.log('Using local mock/stored data for users');
+      
+      // Get mock users
+      const mockUsers = getMockUsers();
+      console.log(`Found ${mockUsers.length} mock users`);
+      
+      // Get created users from localStorage
+      let createdUsers = [];
       try {
         const storedUsers = localStorage.getItem('createdUsers');
-        console.log('Raw stored users from localStorage:', storedUsers);
-        
         if (storedUsers) {
-          newUsers = JSON.parse(storedUsers);
-          // Double check for valid array 
-          if (!Array.isArray(newUsers)) {
-            console.warn('createdUsers is not an array, resetting to empty array');
-            newUsers = [];
-          }
+          createdUsers = JSON.parse(storedUsers);
+          console.log(`Found ${createdUsers.length} created users in localStorage`);
         }
       } catch (e) {
-        console.error('Error parsing createdUsers from localStorage:', e);
-        newUsers = [];
+        console.error('Error parsing created users:', e);
       }
       
-      // Try to get registered users as well (from Register.js form submissions)
+      // Get registered users from localStorage
       let registeredUsers = [];
       try {
-        // Check if we have registered users in localStorage
-        const storedRegistrations = localStorage.getItem('registeredUsers');
-        
-        if (storedRegistrations) {
-          const parsedRegistrations = JSON.parse(storedRegistrations);
-          if (Array.isArray(parsedRegistrations)) {
-            registeredUsers = parsedRegistrations;
-            console.log('Found registered users:', registeredUsers);
-          }
-        } else {
-          console.log('No registered users found in localStorage');
-          
-          // For demo/development - create a storage for registrations if it doesn't exist
-          localStorage.setItem('registeredUsers', JSON.stringify([]));
+        const storedRegistered = localStorage.getItem('registeredUsers');
+        if (storedRegistered) {
+          registeredUsers = JSON.parse(storedRegistered);
+          console.log(`Found ${registeredUsers.length} registered users in localStorage`);
         }
       } catch (e) {
-        console.error('Error reading registered users:', e);
+        console.error('Error parsing registered users:', e);
       }
       
-      console.log('Retrieved created users from localStorage:', newUsers);
-      console.log('Retrieved registered users from localStorage:', registeredUsers);
+      // Combine all user sources
+      let allUsers = [
+        ...mockUsers,
+        ...createdUsers,
+        ...registeredUsers
+      ];
       
-      // Combine mock users, newly created users, and registered users
-      const allUsers = [...mockUsers, ...newUsers, ...registeredUsers];
-      console.log('Combined users list:', allUsers);
+      // Normalize user data to ensure consistent format
+      allUsers = allUsers.map(user => ({
+        id: user.id || user._id || `local_${Math.random().toString(36).substring(2, 11)}`,
+        name: user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+        email: user.email || '',
+        userType: (user.userType || 'customer').toLowerCase().trim(),
+        active: user.active !== undefined ? user.active : true,
+        // Preserve original data for compatibility
+        ...user
+      }));
       
-      // Log user types for debugging
-      const userTypeCount = {};
-      allUsers.forEach(user => {
-        userTypeCount[user.userType] = (userTypeCount[user.userType] || 0) + 1;
-      });
-      console.log('User types in combined list:', userTypeCount);
+      // Remove duplicates based on email
+      const uniqueUsers = [];
+      const emailSet = new Set();
       
-      // Apply search filter if provided
-      const filteredUsers = search 
-        ? allUsers.filter(user => 
-            user.name?.toLowerCase().includes(search.toLowerCase()) || 
-            user.email?.toLowerCase().includes(search.toLowerCase()))
-        : allUsers;
+      for (const user of allUsers) {
+        if (!emailSet.has(user.email.toLowerCase())) {
+          emailSet.add(user.email.toLowerCase());
+          uniqueUsers.push(user);
+        }
+      }
+      
+      allUsers = uniqueUsers;
+      
+      // Apply userType filter if specified - case insensitive
+      if (userType && userType.trim() !== '') {
+        const normalizedUserType = userType.toLowerCase().trim();
+        allUsers = allUsers.filter(user => 
+          user.userType && user.userType.toLowerCase() === normalizedUserType
+        );
+        console.log(`Filtered by userType '${normalizedUserType}', remaining: ${allUsers.length} users`);
+      }
+      
+      // Apply search filter if specified - case insensitive and sanitized
+      if (search && search.trim() !== '') {
+        const searchTerms = search.toLowerCase().trim().split(/\s+/);
+        
+        allUsers = allUsers.filter(user => {
+          // Get normalized name and email for searching
+          const fullName = user.name ? user.name.toLowerCase() : '';
+          const firstName = user.firstName ? user.firstName.toLowerCase() : '';
+          const lastName = user.lastName ? user.lastName.toLowerCase() : '';
+          const email = (user.email || '').toLowerCase();
+          
+          // Check if any term matches any of the fields
+          return searchTerms.some(term => 
+            fullName.includes(term) || 
+            firstName.includes(term) || 
+            lastName.includes(term) || 
+            email.includes(term)
+          );
+        });
+        
+        console.log(`Filtered by search '${search}', remaining: ${allUsers.length} users`);
+      }
+      
+      // Calculate total before pagination
+      const total = allUsers.length;
       
       // Apply pagination
       const startIndex = (page - 1) * limit;
       const endIndex = startIndex + limit;
-      const paginatedUsers = filteredUsers.slice(startIndex, endIndex);
+      const paginatedUsers = allUsers.slice(startIndex, endIndex);
       
-      console.log('Returning paginated users:', {
-        page,
-        limit,
-        total: filteredUsers.length,
-        users: paginatedUsers
-      });
+      console.log(`Paginated users: ${paginatedUsers.length} (page ${page}, limit ${limit})`);
       
       return {
         success: true,
         data: {
           users: paginatedUsers,
-          total: filteredUsers.length
+          total: total,
+          page: page,
+          limit: limit,
+          pages: Math.ceil(total / limit)
         }
       };
     } catch (error) {
-      console.error('Direct users fetch error:', error);
-      throw { success: false, message: 'Failed to fetch users' };
+      console.error('Error in getUsersDirectly:', error);
+      return {
+        success: false,
+        message: 'Failed to fetch users',
+        error: error.message
+      };
     }
   };
 

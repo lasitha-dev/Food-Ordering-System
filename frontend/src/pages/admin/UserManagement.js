@@ -23,9 +23,13 @@ import {
   TextField,
   InputAdornment,
   CircularProgress,
-  Tooltip
+  Tooltip,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem
 } from '@mui/material';
-import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon, Search as SearchIcon, Refresh as RefreshIcon, LockReset as LockResetIcon, Info as InfoIcon } from '@mui/icons-material';
+import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon, Search as SearchIcon, Refresh as RefreshIcon, LockReset as LockResetIcon, Info as InfoIcon, Clear as ClearIcon } from '@mui/icons-material';
 import * as authApi from '../../services/auth-service/api';
 import useAuth from '../../hooks/useAuth';
 
@@ -50,10 +54,38 @@ const UserManagement = () => {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [searchTerm, setSearchTerm] = useState('');
+  const [roleFilter, setRoleFilter] = useState('');
   const [totalUsers, setTotalUsers] = useState(0);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0); // Add a key to force refresh
+  
+  // Add debounce function for search and filter updates
+  // This is at the top of the component, just after state definitions
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
+  const [debouncedRoleFilter, setDebouncedRoleFilter] = useState('');
+  
+  // Search debounce effect
+  useEffect(() => {
+    const timerId = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 500); // 500ms delay
+
+    return () => {
+      clearTimeout(timerId);
+    };
+  }, [searchTerm]);
+  
+  // Role filter debounce effect
+  useEffect(() => {
+    const timerId = setTimeout(() => {
+      setDebouncedRoleFilter(roleFilter);
+    }, 300); // 300ms delay
+
+    return () => {
+      clearTimeout(timerId);
+    };
+  }, [roleFilter]);
   
   // Force refresh when receiving navigation state with refresh:true
   useEffect(() => {
@@ -125,15 +157,24 @@ const UserManagement = () => {
       setError(null);
       
       try {
+        // Sanitize inputs
+        const sanitizedSearch = debouncedSearchTerm.trim();
+        const sanitizedRoleFilter = debouncedRoleFilter.trim();
+        
+        console.log(`Fetching users with parameters: page=${page + 1}, limit=${rowsPerPage}, search="${sanitizedSearch}", role="${sanitizedRoleFilter}"`);
+        
         // Try using our API first
+        let apiSuccess = false;
+        
         try {
-          const response = await authApi.getUsers(page + 1, rowsPerPage, searchTerm);
+          const response = await authApi.getUsers(page + 1, rowsPerPage, sanitizedSearch, sanitizedRoleFilter);
           
           // Debug log to see exact response structure
           console.log('API response structure:', {
             success: response.success,
             data: response.data,
             count: response.count,
+            total: response.total,
             isDataArray: Array.isArray(response.data),
             hasNestedUsers: response.data && response.data.users,
             dataLength: response.data?.length,
@@ -143,35 +184,37 @@ const UserManagement = () => {
           });
           
           if (response.success) {
+            apiSuccess = true;
+            
+            // Consistent user data normalization function
+            const normalizeUserData = (user) => ({
+              id: user.id || user._id || '',
+              name: user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Unknown User',
+              email: user.email || '',
+              userType: (user.userType || 'customer').toLowerCase(),
+              active: user.active !== undefined ? user.active : true
+            });
+            
             // Handle backend response format which has users directly in 'data' array
             // and count in 'count' property
             if (Array.isArray(response.data)) {
               // Ensure consistent data format
-              const processedUsers = response.data.map(user => ({
-                id: user.id || user._id,
-                name: user.name || `${user.firstName || ''} ${user.lastName || ''}`,
-                email: user.email,
-                userType: user.userType,
-                active: user.active !== undefined ? user.active : true
-              }));
+              const processedUsers = response.data.map(normalizeUserData);
               
               setUsers(processedUsers);
-              setTotalUsers(response.count || response.data.length);
+              // Use total from response for pagination if available, otherwise use count
+              setTotalUsers(response.total || response.count || response.data.length);
               console.log('Using array data format, processed users:', processedUsers);
+              console.log(`Total users: ${response.total || response.count || response.data.length}`);
             } 
             // Handle cases where users might be nested in data.users
             else if (response.data && response.data.users) {
-              const processedUsers = response.data.users.map(user => ({
-                id: user.id || user._id,
-                name: user.name || `${user.firstName || ''} ${user.lastName || ''}`,
-                email: user.email,
-                userType: user.userType,
-                active: user.active !== undefined ? user.active : true
-              }));
+              const processedUsers = response.data.users.map(normalizeUserData);
               
               setUsers(processedUsers);
               setTotalUsers(response.data.total);
               console.log('Using nested data format, processed users:', processedUsers);
+              console.log(`Total users: ${response.data.total}`);
             }
             // Ensure users is never undefined with a default empty array
             else {
@@ -183,11 +226,22 @@ const UserManagement = () => {
             return;
           }
         } catch (apiError) {
-          console.error('API fetch failed, trying direct method:', apiError);
+          console.error('API fetch failed, trying direct method:', apiError.message || apiError);
+          // Show user-friendly error message if API call failed
+          if (apiError.response?.status === 403) {
+            setError('You do not have permission to view users.');
+          } else if (apiError.response?.status === 401) {
+            setError('Authentication error. Please log in again.');
+          }
+        }
+        
+        if (apiSuccess) {
+          return; // Don't proceed to fallback if API was successful
         }
         
         // If API fails, use our direct method with mock data
-        const directResponse = await getUsersDirectly(page + 1, rowsPerPage, searchTerm);
+        console.log('Falling back to direct user fetching method');
+        const directResponse = await getUsersDirectly(page + 1, rowsPerPage, sanitizedSearch, sanitizedRoleFilter);
         
         // Debug log for direct response
         console.log('Direct response structure:', {
@@ -198,13 +252,27 @@ const UserManagement = () => {
         });
         
         if (directResponse.success && directResponse.data) {
+          // Clear any previous errors since we have data
+          setError(null);
+          
+          // Consistent user data normalization function
+          const normalizeUserData = (user) => ({
+            id: user.id || user._id || '',
+            name: user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Unknown User',
+            email: user.email || '',
+            userType: (user.userType || 'customer').toLowerCase(),
+            active: user.active !== undefined ? user.active : true
+          });
+          
           if (directResponse.data.users) {
-            setUsers(directResponse.data.users);
+            const processedUsers = directResponse.data.users.map(normalizeUserData);
+            setUsers(processedUsers);
             setTotalUsers(directResponse.data.total || 0);
           } 
           // Handle case where data itself is the users array
           else if (Array.isArray(directResponse.data)) {
-            setUsers(directResponse.data);
+            const processedUsers = directResponse.data.map(normalizeUserData);
+            setUsers(processedUsers);
             setTotalUsers(directResponse.data.length);
           }
           // Default to empty array if no valid response format
@@ -232,7 +300,7 @@ const UserManagement = () => {
     
     // Call the function to fetch users
     fetchUsers();
-  }, [page, rowsPerPage, searchTerm, getUsersDirectly, refreshKey]); // Add refreshKey to dependencies
+  }, [page, rowsPerPage, debouncedSearchTerm, debouncedRoleFilter, getUsersDirectly, refreshKey]);
   
   // Handle page change
   const handleChangePage = (event, newPage) => {
@@ -248,7 +316,13 @@ const UserManagement = () => {
   // Handle search input change
   const handleSearchChange = (event) => {
     setSearchTerm(event.target.value);
-    setPage(0); // Reset page when search changes
+    setPage(0); // Reset to first page when search changes
+  };
+
+  // Handle role filter change
+  const handleRoleFilterChange = (event) => {
+    setRoleFilter(event.target.value);
+    setPage(0); // Reset to first page when filter changes
   };
   
   // Open delete confirmation dialog
@@ -365,6 +439,94 @@ const UserManagement = () => {
     }
   };
 
+  // Improved filters render function
+  const renderFilters = () => {
+    // Define valid user roles for the system
+    const validRoles = [
+      { value: '', label: 'All Roles' },
+      { value: 'admin', label: 'Admin' },
+      { value: 'restaurant-admin', label: 'Restaurant Admin' },
+      { value: 'delivery-personnel', label: 'Delivery Personnel' },
+      { value: 'customer', label: 'Customer' }
+    ];
+    
+    return (
+      <Box sx={{ display: 'flex', mb: 2, alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+        <TextField
+          variant="outlined"
+          size="small"
+          placeholder="Search by name or email..."
+          value={searchTerm}
+          onChange={handleSearchChange}
+          sx={{ minWidth: 300, flexGrow: 1 }}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon />
+              </InputAdornment>
+            ),
+            endAdornment: searchTerm ? (
+              <InputAdornment position="end">
+                <IconButton
+                  size="small"
+                  onClick={() => setSearchTerm('')}
+                  aria-label="Clear search"
+                >
+                  <ClearIcon fontSize="small" />
+                </IconButton>
+              </InputAdornment>
+            ) : null
+          }}
+        />
+        
+        <FormControl size="small" sx={{ minWidth: 200 }}>
+          <InputLabel id="role-filter-label">Filter by Role</InputLabel>
+          <Select
+            labelId="role-filter-label"
+            value={roleFilter}
+            label="Filter by Role"
+            onChange={handleRoleFilterChange}
+          >
+            {validRoles.map(role => (
+              <MenuItem key={role.value} value={role.value}>
+                {role.label}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+        
+        <Tooltip title="Refresh user list">
+          <IconButton onClick={() => setRefreshKey(prev => prev + 1)}>
+            <RefreshIcon />
+          </IconButton>
+        </Tooltip>
+        
+        {/* Show active filters */}
+        {(searchTerm || roleFilter) && (
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', width: '100%', mt: 1 }}>
+            <Typography variant="body2" color="text.secondary">
+              Active filters:
+            </Typography>
+            {searchTerm && (
+              <Chip 
+                size="small" 
+                label={`Search: ${searchTerm}`} 
+                onDelete={() => setSearchTerm('')}
+              />
+            )}
+            {roleFilter && (
+              <Chip 
+                size="small" 
+                label={`Role: ${validRoles.find(r => r.value === roleFilter)?.label || roleFilter}`} 
+                onDelete={() => setRoleFilter('')}
+              />
+            )}
+          </Box>
+        )}
+      </Box>
+    );
+  };
+
   return (
     <Box>
       <Box 
@@ -411,23 +573,7 @@ const UserManagement = () => {
       </Alert>
       
       <Paper sx={{ width: '100%', mb: 2 }}>
-        <Box sx={{ p: 2 }}>
-          <TextField
-            label="Search users"
-            variant="outlined"
-            size="small"
-            fullWidth
-            value={searchTerm}
-            onChange={handleSearchChange}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon />
-                </InputAdornment>
-              ),
-            }}
-          />
-        </Box>
+        {renderFilters()}
         
         <TableContainer>
           <Table>

@@ -8,7 +8,8 @@ import {
   CardContent,
   CircularProgress,
   Avatar,
-  Tooltip
+  Tooltip,
+  useTheme
 } from '@mui/material';
 import PersonIcon from '@mui/icons-material/Person';
 import PeopleIcon from '@mui/icons-material/People';
@@ -20,6 +21,7 @@ import useAuth from '../../hooks/useAuth';
 import * as authApi from '../../services/auth-service/api';
 
 const AdminDashboard = () => {
+  const theme = useTheme();
   const { currentUser, getUsersDirectly, forceUpdateUserType } = useAuth();
   const [userStats, setUserStats] = useState({
     total: 0,
@@ -54,7 +56,7 @@ const AdminDashboard = () => {
       setError(null);
       
       try {
-        // Try using the API first - this should now work with our new endpoint
+        // Try using the API first - this should work with our users/stats endpoint
         const response = await authApi.getUserStats();
         
         // If the API is successful and contains data
@@ -71,10 +73,20 @@ const AdminDashboard = () => {
         }
         
         // Calculate counts manually from users list - this is our fallback
-        const usersResponse = await getUsersDirectly(1, 1000); // Get all users
+        const usersResponse = await getUsersDirectly(1, 1000, ""); // Get all users with no filtering
         
-        if (usersResponse && usersResponse.success && usersResponse.data) {
-          const users = usersResponse.data.users || [];
+        if (usersResponse && usersResponse.success) {
+          let users = [];
+          
+          // Handle different response formats
+          if (Array.isArray(usersResponse.data)) {
+            users = usersResponse.data;
+          } else if (usersResponse.data && Array.isArray(usersResponse.data.users)) {
+            users = usersResponse.data.users;
+          } else {
+            console.error('Unexpected response format:', usersResponse);
+            users = [];
+          }
           
           // Initialize counters
           const stats = {
@@ -101,11 +113,14 @@ const AdminDashboard = () => {
                 stats.customers++;
                 break;
               default:
+                console.warn('Unknown user type:', user.userType);
                 break;
             }
           });
           
           setUserStats(stats);
+        } else {
+          throw new Error('Failed to fetch users data');
         }
       } catch (err) {
         console.error('Error fetching user statistics:', err);
@@ -123,51 +138,62 @@ const AdminDashboard = () => {
       title: "Admins",
       value: userStats.admins,
       icon: <AdminPanelSettingsIcon sx={{ fontSize: 40 }} />,
-      color: "#d32f2f", // error.dark
-      bgColor: "#FFEBEE", // error.light with reduced opacity
+      color: theme.palette.error.main,
+      bgColor: theme.palette.error.light,
+      gradient: 'linear-gradient(135deg, #FF8A80 0%, #FF5252 100%)'
     },
     {
       title: "Restaurant Admins",
       value: userStats.restaurantAdmins,
       icon: <RestaurantIcon sx={{ fontSize: 40 }} />,
-      color: "#1976d2", // primary.dark
-      bgColor: "#E3F2FD", // primary.light with reduced opacity
+      color: theme.palette.primary.main,
+      bgColor: theme.palette.primary.light,
+      gradient: 'linear-gradient(135deg, #FFAB91 0%, #FF7043 100%)'
     },
     {
       title: "Delivery Personnel",
       value: userStats.deliveryPersonnel,
       icon: <LocalShippingIcon sx={{ fontSize: 40 }} />,
-      color: "#388e3c", // success.dark
-      bgColor: "#E8F5E9", // success.light with reduced opacity
-    },
-    {
-      title: "Customers",
-      value: userStats.customers, 
-      icon: <PersonOutlineIcon sx={{ fontSize: 40 }} />,
-      color: "#0288d1", // info.dark
-      bgColor: "#E1F5FE", // info.light with reduced opacity
+      color: theme.palette.secondary.main,
+      bgColor: theme.palette.secondary.light,
+      gradient: 'linear-gradient(135deg, #80CBC4 0%, #26A69A 100%)'
     }
   ];
 
   return (
     <Box>
-      <Typography variant="h4" gutterBottom>
-        Admin Dashboard
-      </Typography>
-      
-      <Typography variant="subtitle1" color="textSecondary" paragraph>
-        Welcome back, {currentUser?.name || 'Admin'}
-      </Typography>
+      <Box 
+        sx={{ 
+          mb: 4, 
+          position: 'relative', 
+          pb: 2,
+          borderBottom: `1px solid ${theme.palette.divider}` 
+        }}
+      >
+        <Typography variant="h4" fontWeight="bold" gutterBottom>
+          Admin Dashboard
+        </Typography>
+        
+        <Typography variant="subtitle1" color="text.secondary" sx={{ mb: 1 }}>
+          Welcome back, {currentUser?.name || 'Admin'} 👋
+        </Typography>
+        
+        <Typography variant="body2" color="text.secondary">
+          Manage your food ordering system from one central dashboard
+        </Typography>
+      </Box>
       
       {/* Main Stats Card */}
       <Card 
-        elevation={2}
+        elevation={0}
         sx={{ 
-          mb: 4, 
-          borderRadius: 3,
+          mb: 5,
+          borderRadius: 4,
           overflow: 'visible',
           position: 'relative',
-          backgroundImage: 'linear-gradient(120deg, #f0f2f5 0%, #e0f7fa 100%)',
+          background: 'linear-gradient(135deg, #FF8A65 0%, #FF5722 100%)',
+          color: 'white',
+          boxShadow: '0px 10px 30px rgba(255, 87, 34, 0.3)',
         }}
       >
         <CardContent sx={{ p: 4 }}>
@@ -176,39 +202,39 @@ const AdminDashboard = () => {
               sx={{ 
                 width: 64, 
                 height: 64, 
-                bgcolor: 'primary.main',
-                boxShadow: 3
+                bgcolor: 'white',
+                color: theme.palette.primary.main,
+                boxShadow: '0px 8px 16px rgba(255, 87, 34, 0.24)'
               }}
             >
-              <PeopleIcon sx={{ fontSize: 40 }} />
+              <PeopleIcon sx={{ fontSize: 36 }} />
             </Avatar>
           </Box>
           
-          <Typography variant="h6" color="textSecondary" fontWeight={500} gutterBottom>
+          <Typography variant="h6" fontWeight={600} sx={{ mb: 1, opacity: 0.95 }}>
             Total Users
           </Typography>
           
           {loading ? (
             <Box display="flex" justifyContent="center" my={3}>
-              <CircularProgress />
+              <CircularProgress sx={{ color: 'white' }} />
             </Box>
           ) : error ? (
-            <Typography color="error" align="center">
+            <Typography color="white" align="center">
               {error}
             </Typography>
           ) : (
             <>
               <Typography 
                 variant="h2" 
-                color="primary.dark" 
-                fontWeight={600}
-                sx={{ mb: 2 }}
+                fontWeight={700}
+                sx={{ mb: 1 }}
               >
                 {userStats.total}
               </Typography>
               
-              <Typography variant="body2" color="textSecondary">
-                Active users across all account types
+              <Typography variant="body2" sx={{ opacity: 0.9 }}>
+                Active users across your platform
               </Typography>
             </>
           )}
@@ -219,61 +245,102 @@ const AdminDashboard = () => {
       {!loading && !error && (
         <Grid container spacing={3}>
           {statCards.map((stat, index) => (
-            <Grid item xs={12} sm={6} md={3} key={index}>
-              <Tooltip title={`${stat.title} account${stat.value !== 1 ? 's' : ''}`} arrow>
-                <Card 
-                  elevation={2}
+            <Grid item xs={12} sm={6} md={4} key={index}>
+              <Card 
+                elevation={0}
+                sx={{ 
+                  p: 3, 
+                  height: '100%',
+                  borderRadius: 3,
+                  transition: 'all 0.3s ease',
+                  background: stat.gradient,
+                  color: 'white',
+                  '&:hover': {
+                    transform: 'translateY(-5px)',
+                    boxShadow: '0px 12px 24px rgba(0, 0, 0, 0.16)'
+                  },
+                }}
+              >
+                <Box 
                   sx={{ 
-                    p: 3, 
-                    height: '100%',
-                    borderRadius: 3,
-                    transition: 'transform 0.2s, box-shadow 0.2s',
-                    '&:hover': {
-                      transform: 'translateY(-5px)',
-                      boxShadow: 6
-                    },
-                    background: `linear-gradient(135deg, ${stat.bgColor} 0%, white 100%)`,
+                    display: 'flex', 
+                    justifyContent: 'space-between',
+                    alignItems: 'flex-start'
                   }}
                 >
-                  <Box 
+                  <Box>
+                    <Typography 
+                      variant="h3" 
+                      sx={{ fontWeight: 700 }}
+                    >
+                      {stat.value}
+                    </Typography>
+                    <Typography 
+                      variant="subtitle2" 
+                      sx={{ mt: 1, fontWeight: 500, opacity: 0.9 }}
+                    >
+                      {stat.title}
+                    </Typography>
+                  </Box>
+                  <Avatar
                     sx={{ 
-                      display: 'flex', 
-                      justifyContent: 'space-between',
-                      alignItems: 'flex-start'
+                      bgcolor: 'rgba(255, 255, 255, 0.24)',
+                      color: 'white',
+                      width: 56,
+                      height: 56,
+                      boxShadow: '0px 8px 16px rgba(0, 0, 0, 0.08)'
                     }}
                   >
-                    <Box>
-                      <Typography 
-                        variant="h3" 
-                        sx={{ fontWeight: 'bold', color: stat.color }}
-                      >
-                        {stat.value}
-                      </Typography>
-                      <Typography 
-                        variant="subtitle2" 
-                        color="textSecondary"
-                        sx={{ mt: 1, fontWeight: 'medium' }}
-                      >
-                        {stat.title}
-                      </Typography>
-                    </Box>
-                    <Avatar
-                      sx={{ 
-                        bgcolor: stat.bgColor, 
-                        color: stat.color,
-                        width: 56,
-                        height: 56
-                      }}
-                    >
-                      {stat.icon}
-                    </Avatar>
-                  </Box>
-                </Card>
-              </Tooltip>
+                    {stat.icon}
+                  </Avatar>
+                </Box>
+              </Card>
             </Grid>
           ))}
         </Grid>
       )}
+      
+      {/* Recent Activity Section - Placeholder for future enhancement */}
+      <Box sx={{ mt: 6, mb: 4 }}>
+        <Typography variant="h5" fontWeight={600} gutterBottom>
+          Quick Actions
+        </Typography>
+        <Grid container spacing={3} sx={{ mt: 1 }}>
+          <Grid item xs={12}>
+            <Card
+              sx={{
+                p: 3,
+                height: '100%',
+                borderRadius: 3,
+                backgroundColor: theme.palette.background.subtle,
+                border: `1px solid ${theme.palette.divider}`,
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                alignItems: 'center',
+                textAlign: 'center'
+              }}
+            >
+              <Avatar
+                sx={{
+                  width: 72,
+                  height: 72,
+                  mb: 2,
+                  background: 'linear-gradient(135deg, #FFAB91 0%, #FF7043 100%)',
+                }}
+              >
+                <PeopleIcon sx={{ fontSize: 36 }} />
+              </Avatar>
+              <Typography variant="h6" gutterBottom>
+                User Management
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Add, edit, or manage user accounts and permissions
+              </Typography>
+            </Card>
+          </Grid>
+        </Grid>
+      </Box>
     </Box>
   );
 };
