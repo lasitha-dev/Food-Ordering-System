@@ -27,6 +27,7 @@ import UserManagement from './pages/admin/UserManagement';
 import CreateUser from './pages/admin/CreateUser';
 import EditUser from './pages/admin/EditUser';
 import Settings from './pages/admin/Settings';
+import Reports from './pages/admin/Reports';
 
 // Protected route component
 import ProtectedRoute from './components/ProtectedRoute';
@@ -44,6 +45,7 @@ import CreateFoodItem from './pages/restaurant/CreateFoodItem';
 import EditFoodItem from './pages/restaurant/EditFoodItem';
 import RestaurantSettings from './pages/restaurant/Settings';
 import RestaurantOrders from './pages/restaurant/Orders';
+import RestaurantReports from './pages/restaurant/Reports';
 
 // Delivery personnel pages
 import DeliveryDashboard from './pages/delivery/Dashboard';
@@ -434,6 +436,7 @@ const ThemedApp = () => {
             <Route path="users/create" element={<CreateUser />} />
             <Route path="users/:id/edit" element={<EditUser />} />
             <Route path="settings" element={<Settings />} />
+            <Route path="reports" element={<Reports />} />
           </Route>
           
           {/* Customer routes - wrapped with CartProvider */}
@@ -460,6 +463,7 @@ const ThemedApp = () => {
             <Route path="food-items/create" element={<CreateFoodItem />} />
             <Route path="food-items/edit/:id" element={<EditFoodItem />} />
             <Route path="orders" element={<RestaurantOrders />} />
+            <Route path="reports" element={<RestaurantReports />} />
             <Route path="settings" element={<RestaurantSettings />} />
           </Route>
           

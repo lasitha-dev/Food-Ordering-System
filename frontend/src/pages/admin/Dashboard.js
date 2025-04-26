@@ -21,6 +21,7 @@ import RestaurantIcon from '@mui/icons-material/Restaurant';
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import AssessmentIcon from '@mui/icons-material/Assessment';
 import useAuth from '../../hooks/useAuth';
 import * as authApi from '../../services/auth-service/api';
 
@@ -398,13 +399,13 @@ const AdminDashboard = () => {
         </Grid>
       )}
       
-      {/* Recent Activity Section - Placeholder for future enhancement */}
+      {/* Quick Actions Section */}
       <Box sx={{ mt: 6, mb: 4 }}>
         <Typography variant="h5" fontWeight={600} gutterBottom>
           Quick Actions
         </Typography>
         <Grid container spacing={3} sx={{ mt: 1 }}>
-          <Grid item xs={12}>
+          <Grid item xs={12} sm={6}>
             <Card
               sx={{
                 p: 3,
@@ -416,8 +417,17 @@ const AdminDashboard = () => {
                 flexDirection: 'column',
                 justifyContent: 'center',
                 alignItems: 'center',
-                textAlign: 'center'
+                textAlign: 'center',
+                transition: 'all 0.3s ease',
+                '&:hover': {
+                  transform: 'translateY(-5px)',
+                  boxShadow: '0px 12px 24px rgba(0, 0, 0, 0.12)'
+                },
+                cursor: 'pointer'
               }}
+              component={RouterLink}
+              to="/admin/users"
+              style={{ textDecoration: 'none' }}
             >
               <Avatar
                 sx={{
@@ -434,6 +444,49 @@ const AdminDashboard = () => {
               </Typography>
               <Typography variant="body2" color="text.secondary">
                 Add, edit, or manage user accounts and permissions
+              </Typography>
+            </Card>
+          </Grid>
+          
+          <Grid item xs={12} sm={6}>
+            <Card
+              sx={{
+                p: 3,
+                height: '100%',
+                borderRadius: 3,
+                backgroundColor: theme.palette.background.subtle,
+                border: `1px solid ${theme.palette.divider}`,
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                alignItems: 'center',
+                textAlign: 'center',
+                transition: 'all 0.3s ease',
+                '&:hover': {
+                  transform: 'translateY(-5px)',
+                  boxShadow: '0px 12px 24px rgba(0, 0, 0, 0.12)'
+                },
+                cursor: 'pointer'
+              }}
+              component={RouterLink}
+              to="/admin/reports"
+              style={{ textDecoration: 'none' }}
+            >
+              <Avatar
+                sx={{
+                  width: 72,
+                  height: 72,
+                  mb: 2,
+                  background: 'linear-gradient(135deg, #80CBC4 0%, #26A69A 100%)',
+                }}
+              >
+                <AssessmentIcon sx={{ fontSize: 36 }} />
+              </Avatar>
+              <Typography variant="h6" gutterBottom>
+                Reports
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Generate and download reports on user activity and system data
               </Typography>
             </Card>
           </Grid>

@@ -67,7 +67,7 @@ const RestaurantLayout = () => {
     { text: 'Dashboard', icon: <DashboardIcon />, path: '/restaurant' },
     { text: 'Food Items', icon: <FoodItemIcon />, path: '/restaurant/food-items' },
     { text: 'Orders', icon: <OrdersIcon />, path: '/restaurant/orders' },
-    { text: 'Reports', icon: <ReportsIcon />, path: '/restaurant/reports', disabled: true },
+    { text: 'Reports', icon: <ReportsIcon />, path: '/restaurant/reports' },
     { text: 'Settings', icon: <SettingsIcon />, path: '/restaurant/settings' },
   ];
 
