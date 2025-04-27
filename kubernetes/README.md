@@ -68,6 +68,30 @@ Then open your browser and navigate to:
 http://food-ordering.local
 ```
 
+## Service Architecture
+
+The application consists of the following microservices:
+
+### Auth Service
+- Handles user authentication and authorization
+- Manages user profiles and roles
+- Uses Redis for token blacklisting
+
+### Restaurant Service
+- Manages food items and categories
+- Provides APIs for restaurant management
+- Generates restaurant performance reports
+
+### Order Service
+- Manages the entire order lifecycle
+- Processes payments for orders (card payments and cash on delivery)
+- Tracks order status and delivery progress
+- Assigns orders to delivery personnel
+
+### Notification Service
+- Sends email notifications for order status changes
+- Notifies customers about delivery updates
+
 ## MongoDB Atlas Configuration
 
 This application uses MongoDB Atlas as its database. The connection URI is stored as a Kubernetes secret.
@@ -91,6 +115,7 @@ kubectl apply -f kubernetes/secrets.yaml
 kubectl apply -f kubernetes/auth-service-deployment.yaml
 kubectl apply -f kubernetes/order-service-deployment.yaml
 kubectl apply -f kubernetes/restaurant-service-deployment.yaml
+kubectl apply -f kubernetes/notification-service-deployment.yaml
 
 # Deploy frontend
 kubectl apply -f kubernetes/frontend-deployment.yaml
